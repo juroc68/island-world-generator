@@ -807,7 +807,7 @@ namespace IslandWorldGenerator
                 // Onglet 0: Terrain & Relief
                 // Graine
                 Raylib.DrawTextEx(font, "Graine", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_seed}", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{_seed} (seed {_seed})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawIntInput("seed", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _seed, 1, 999999))
                 {
                     _needsRegen = true;
@@ -824,7 +824,7 @@ namespace IslandWorldGenerator
                 // Échelle du relief : affichée en tuiles, stockée en fréquence de bruit.
                 float reliefScaleTiles = 1.0f / _scale;
                 Raylib.DrawTextEx(font, "Taille des reliefs", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{reliefScaleTiles:F0} tuiles entre grands reliefs (bruit {_scale:F4})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{reliefScaleTiles:F0} tuiles (scale {_scale:F4})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawFloatInput("relief-scale", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref reliefScaleTiles, 8f, 200f, 0))
                 {
                     _scale = Math.Clamp(1.0f / reliefScaleTiles, 0.005f, 0.12f);
@@ -849,7 +849,7 @@ namespace IslandWorldGenerator
 
                 // Hauteur Max
                 Raylib.DrawTextEx(font, "Hauteur maximale", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_maxHeight:F0} blocs de hauteur", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{_maxHeight:F0} blocs (maxHeight {_maxHeight:F1})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawFloatInput("max-height", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _maxHeight, 5f, 40f, 0))
                 {
                     _needsRegen = true;
@@ -872,7 +872,7 @@ namespace IslandWorldGenerator
                 // Variations Relief (Persistance)
                 float roughnessPercent = _persistence * 100.0f;
                 Raylib.DrawTextEx(font, "Rugosité", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{roughnessPercent:F0}% de détails secondaires", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{roughnessPercent:F0}% (persistence {_persistence:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawFloatInput("roughness", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref roughnessPercent, 10f, 80f, 0))
                 {
                     _persistence = Math.Clamp(roughnessPercent / 100.0f, 0.10f, 0.80f);
@@ -943,7 +943,7 @@ namespace IslandWorldGenerator
                 // Niveau d'eau
                 float waterPercent = _waterLevel * 100.0f;
                 Raylib.DrawTextEx(font, "Niveau d'eau", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{waterPercent:F0}% de la hauteur de terrain", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{waterPercent:F0}% (waterLevel {_waterLevel:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawFloatInput("water-level", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref waterPercent, 5f, 50f, 0))
                 {
                     _waterLevel = Math.Clamp(waterPercent / 100.0f, 0.05f, 0.50f);
@@ -968,7 +968,7 @@ namespace IslandWorldGenerator
                 float moistureValue = _moistureShift * 100.0f;
                 float humidityEquivalent = Math.Clamp(50.0f + moistureValue, 0.0f, 100.0f);
                 Raylib.DrawTextEx(font, "Humidité", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{moistureValue:+0;-0;0} ({humidityEquivalent:F0}% d'humidité)", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{moistureValue:+0;-0;0} / {humidityEquivalent:F0}% (shift {_moistureShift:+0.00;-0.00;0.00})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawFloatInput("moisture", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref moistureValue, -50f, 50f, 0))
                 {
                     _moistureShift = Math.Clamp(moistureValue / 100.0f, -0.50f, 0.50f);
@@ -991,8 +991,9 @@ namespace IslandWorldGenerator
 
                 // Température Celsius
                 string tempText = _temperatureCelsius > 0 ? $"+{_temperatureCelsius}°C" : $"{_temperatureCelsius}°C";
+                float tempShiftValue = (_temperatureCelsius - 15.0f) * 0.008f;
                 Raylib.DrawTextEx(font, "Température", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{tempText} (70°C = végétation impossible)", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{tempText} (tempShift {tempShiftValue:+0.000;-0.000;0.000})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawIntInput("temperature", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _temperatureCelsius, -50, 70))
                 {
                     _needsRegen = true;
@@ -1015,7 +1016,7 @@ namespace IslandWorldGenerator
                 // Surface de l'île
                 float islandPercent = _islandSize * 100.0f;
                 Raylib.DrawTextEx(font, "Surface de l'île", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{islandPercent:F0}% (facteur interne {_islandSize:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{islandPercent:F0}% (islandSize {_islandSize:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 if (DrawFloatInput("island-size", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref islandPercent, 20f, 400f, 0))
                 {
                     _islandSize = Math.Clamp(islandPercent / 100.0f, 0.20f, 4.00f);
@@ -1040,7 +1041,7 @@ namespace IslandWorldGenerator
                 // Onglet 2: Paramètres Monde & Système
                 // Taille du monde
                 Raylib.DrawTextEx(font, "Taille du monde", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_mapWidth} x {_mapLength} tuiles", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                Raylib.DrawTextEx(font, $"{_mapWidth} x {_mapLength} tuiles (map {_mapWidth})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
                 bool click64, click128, click256;
                 DrawButton("64", new Rectangle(inputX, rowY + 31, 58, 30), _mapWidth == 64 ? btnActive : btnNormal, btnHover, font, out click64);
                 DrawButton("128", new Rectangle(inputX + 66, rowY + 31, 58, 30), _mapWidth == 128 ? btnActive : btnNormal, btnHover, font, out click128);
