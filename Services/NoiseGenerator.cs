@@ -7,12 +7,20 @@ namespace IslandWorldGenerator.Services
         private readonly int[] _p = new int[512];
         private readonly Random _random;
 
+        /*
+         * Constructeur de NoiseGenerator. Initialise la table de permutation
+         * avec une graine pseudo-aleatoire donnee.
+         */
         public NoiseGenerator(int seed)
         {
             _random = new Random(seed);
             InitializePermutationTable();
         }
 
+        /*
+         * Genere et melange la table de permutation en utilisant le melange
+         * de Fisher-Yates, et la duplique pour eviter les debordements d'index.
+         */
         private void InitializePermutationTable()
         {
             int[] permutation = new int[256];
@@ -38,6 +46,9 @@ namespace IslandWorldGenerator.Services
             }
         }
 
+        /*
+         * Calcule le bruit de Perlin 2D classique pour des coordonnees donnees.
+         */
         public double Noise(double x, double y)
         {
             int X = (int)Math.Floor(x) & 255;
@@ -58,6 +69,10 @@ namespace IslandWorldGenerator.Services
                                    Grad(_p[b + 1], x - 1, y - 1)));
         }
 
+        /*
+         * Calcule le mouvement brownien fractionnaire (FBM) en cumulant plusieurs
+         * octaves de bruit de Perlin et renvoie une valeur normalisee entre 0 et 1.
+         */
         public double Fbm(double x, double y, int octaves, double persistence, double lacunarity)
         {
             double total = 0;
@@ -77,16 +92,26 @@ namespace IslandWorldGenerator.Services
             return (total / maxValue + 1.0) / 2.0;
         }
 
+        /*
+         * Calcule la courbe d'interpolation douce de Ken Perlin (fade function).
+         */
         private static double Fade(double t)
         {
             return t * t * t * (t * (t * 6 - 15) + 10);
         }
 
+        /*
+         * Effectue une interpolation lineaire simple entre deux valeurs.
+         */
         private static double Lerp(double t, double a, double b)
         {
             return a + t * (b - a);
         }
 
+        /*
+         * Calcule le produit scalaire entre un vecteur de gradient pseudo-aleatoire
+         * et le vecteur de distance.
+         */
         private static double Grad(int hash, double x, double y)
         {
             switch (hash & 7)

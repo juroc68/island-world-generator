@@ -25,6 +25,10 @@ namespace IslandWorldGenerator.Services
         private readonly NoiseGenerator _moistureNoise;
         private readonly Random _random;
 
+        /*
+         * Constructeur de WorldGenerator. Configure les parametres de bruit
+         * et d'echelle pour la generation procedurale de l'ile.
+         */
         public WorldGenerator(int width, int length, int seed, float scale = 0.02f, int octaves = 4, 
                               float persistence = 0.45f, float lacunarity = 2.0f, float maxHeight = 20f, float waterLevel = 0.25f,
                               float moistureShift = 0.0f, float temperatureShift = 0.0f, float islandSize = 1.0f)
@@ -48,6 +52,10 @@ namespace IslandWorldGenerator.Services
             _random = new Random(_seed);
         }
 
+        /*
+         * Genere la grille bidimensionnelle de blocs constituant l'ile
+         * en calculant le relief, l'humidite et les biomes pour chaque position.
+         */
         public WorldBlock[,] GenerateWorld()
         {
             WorldBlock[,] grid = new WorldBlock[_width, _length];
@@ -126,17 +134,14 @@ namespace IslandWorldGenerator.Services
                         adjustedElevation = MathF.Pow(normalizedWater, 1.2f) * _waterLevel;
                     }
 
-                    // Détermination du biome et de la couleur
                     BiomeType biome = GetBiome(adjustedElevation, moisture);
                     Color color = GetBiomeColor(biome);
 
                     // Calcul de la hauteur physique en jeu (relief continu sans cratère)
                     float blockHeight = adjustedElevation * _maxHeight;
 
-                    // Position du bloc
                     Vector3 position = new Vector3(x, blockHeight, z);
 
-                    // Végétation (pas d'arbres dans l'eau)
                     bool hasTree = false;
                     float treeHeight = 0;
                     Color foliageColor = Color.Green;
@@ -162,9 +167,12 @@ namespace IslandWorldGenerator.Services
             return grid;
         }
 
+        /*
+         * Determine le biome d'une case de terrain en fonction de son altitude
+         * et de son humidite locale relative.
+         */
         private BiomeType GetBiome(float elevation, float moisture)
         {
-            // Eau
             if (elevation < _waterLevel)
             {
                 if (elevation < _waterLevel * 0.6f)
@@ -185,7 +193,6 @@ namespace IslandWorldGenerator.Services
             float snowThreshold = Math.Clamp(0.78f + _temperatureShift, 0.4f, 1.0f);
             float mountainThreshold = Math.Clamp(0.64f + _temperatureShift, 0.3f, 1.0f);
 
-            // Montagnes et Sommets enneigés
             if (elevation > snowThreshold)
             {
                 return BiomeType.Snow;
@@ -216,6 +223,9 @@ namespace IslandWorldGenerator.Services
             return BiomeType.Plains;
         }
 
+        /*
+         * Calcule la temperature locale corrigee par l'altitude du terrain.
+         */
         private float GetLocalTemperature(float elevation)
         {
             float globalTemperature = Math.Clamp(0.5f + _temperatureShift, 0.0f, 1.0f);
@@ -226,6 +236,10 @@ namespace IslandWorldGenerator.Services
             return Math.Clamp(globalTemperature - landElevation * 0.28f, 0.0f, 1.0f);
         }
 
+        /*
+         * Definit la presence, la taille et la couleur de la vegetation (arbres)
+         * pour un bloc en fonction de son biome, humidite et altitude.
+         */
         private void ConfigureVegetation(BiomeType biome, float moisture, float elevation, out bool hasTree, out float treeHeight, out Color foliageColor)
         {
             hasTree = false;
@@ -280,6 +294,9 @@ namespace IslandWorldGenerator.Services
             }
         }
 
+        /*
+         * Associe une couleur de base a chaque type de biome pour le rendu visuel.
+         */
         private Color GetBiomeColor(BiomeType biome)
         {
             return biome switch
