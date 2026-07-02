@@ -38,6 +38,7 @@ namespace IslandWorldGenerator
         private static WorldBlock[,] _worldGrid = new WorldBlock[0, 0];
         private static bool _needsRegen = true;
         private static bool _showMenu = true;
+        private static bool _showGrid3D = false;
 
         // Gestion des onglets
         private static int _activeTab = 0; // 0: Terrain & Hauteur, 1: Climat & Surface, 2: Configuration, 3: Aide
@@ -227,6 +228,32 @@ namespace IslandWorldGenerator
                     foreach (Model terrainModel in _terrainModels)
                     {
                         Raylib.DrawModel(terrainModel, Vector3.Zero, 1.0f, Color.White);
+                    }
+                }
+
+                if (_showGrid3D && _hasModel)
+                {
+                    Color gridColor = new Color((byte)255, (byte)255, (byte)255, (byte)50);
+                    for (int x = 0; x < _mapWidth; x++)
+                    {
+                        for (int z = 0; z < _mapLength; z++)
+                        {
+                            float h = _worldGrid[x, z].Height;
+                            Vector3 pos = new Vector3(x, h + 0.05f, z);
+
+                            if (x < _mapWidth - 1)
+                            {
+                                float hRight = _worldGrid[x + 1, z].Height;
+                                Vector3 posRight = new Vector3(x + 1, hRight + 0.05f, z);
+                                Raylib.DrawLine3D(pos, posRight, gridColor);
+                            }
+                            if (z < _mapLength - 1)
+                            {
+                                float hBottom = _worldGrid[x, z + 1].Height;
+                                Vector3 posBottom = new Vector3(x, hBottom + 0.05f, z + 1);
+                                Raylib.DrawLine3D(pos, posBottom, gridColor);
+                            }
+                        }
                     }
                 }
 
@@ -932,6 +959,17 @@ namespace IslandWorldGenerator
                     _biomeBoundaryMode = BiomeBoundaryMode.MarchingSquares;
                     _needsRegen = true;
                 }
+
+                rowY += rowStep;
+
+                Raylib.DrawTextEx(font, "Grille 3D", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
+                string gridText = _showGrid3D ? "Activee" : "Desactivee";
+                Raylib.DrawTextEx(font, gridText, new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                bool clickGridOn, clickGridOff;
+                DrawButton("Oui", new Rectangle(inputX, rowY + 31, 78, 30), _showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOn);
+                DrawButton("Non", new Rectangle(inputX + 86, rowY + 31, 78, 30), !_showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOff);
+                if (clickGridOn) _showGrid3D = true;
+                if (clickGridOff) _showGrid3D = false;
             }
             else if (_activeTab == 1)
             {
