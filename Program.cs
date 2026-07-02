@@ -107,12 +107,13 @@ namespace IslandWorldGenerator
         private static float _cameraDistance = 160.0f;         // Distance de la caméra
         private static Vector3 _cameraTarget = new Vector3(_mapWidth / 2.0f, 4.0f, _mapLength / 2.0f);
 
+        /*
+         * Point d'entree principal de l'application. Initialise la fenetre Raylib,
+         * lance la boucle de mise a jour et de rendu, et gere les entrees clavier.
+         */
         static void Main(string[] args)
         {
-            // Permettre le redimensionnement natif de la fenêtre par l'utilisateur
             Raylib.SetConfigFlags(ConfigFlags.ResizableWindow | ConfigFlags.Msaa4xHint);
-            
-            // Initialisation de la fenêtre Raylib
             Raylib.InitWindow(ScreenWidth, ScreenHeight, "Générateur d'Île 3D Procédural");
             Raylib.SetTargetFPS(60);
 
@@ -126,29 +127,23 @@ namespace IslandWorldGenerator
             Font font = Raylib.LoadFontEx(fontPath, 32, codepoints, 224);
             Raylib.SetTextureFilter(font.Texture, TextureFilter.Bilinear);
 
-            // Rendre le curseur visible
             Raylib.EnableCursor();
 
-            // Initialisation de la caméra 3D
             Camera3D camera = new Camera3D();
             camera.Up = new Vector3(0.0f, 1.0f, 0.0f);
             camera.FovY = 50.0f;
             camera.Projection = CameraProjection.Perspective;
 
-            // Aligner la caméra initialement sur la taille de départ (128)
             ResetCamera();
 
-            // Générateur pour nouvelles graines
             Random random = new Random();
 
-            // Répartition des biomes
             int[] biomeCounts = new int[Enum.GetValues(typeof(BiomeType)).Length];
 
             while (!Raylib.WindowShouldClose())
             {
                 // ---- LOGIQUE DE MISE A JOUR ----
 
-                // Régénération de l'île si nécessaire
                 if (_needsRegen)
                 {
                     if (_hasModel)
@@ -188,7 +183,6 @@ namespace IslandWorldGenerator
                     _hasModel = true;
                     _needsRegen = false;
 
-                    // Calculer les statistiques des biomes
                     Array.Clear(biomeCounts, 0, biomeCounts.Length);
                     for (int x = 0; x < _mapWidth; x++)
                     {
@@ -201,26 +195,22 @@ namespace IslandWorldGenerator
                     RegenerateHumans();
                 }
 
-                // Touche d'action rapide pour une nouvelle graine
                 if (Raylib.IsKeyPressed(KeyboardKey.Space))
                 {
                     _seed = random.Next(1, 100000);
                     _needsRegen = true;
                 }
 
-                // Réinitialiser la caméra au clavier
                 if (Raylib.IsKeyPressed(KeyboardKey.R))
                 {
                     ResetCamera();
                 }
 
-                // Touche pour masquer/afficher le menu
                 if (Raylib.IsKeyPressed(KeyboardKey.H) || Raylib.IsKeyPressed(KeyboardKey.Tab))
                 {
                     _showMenu = !_showMenu;
                 }
 
-                // Mise à jour de la caméra orbitale
                 UpdateOrbitCamera(ref camera);
                 UpdateHumans(Raylib.GetFrameTime());
 
@@ -228,13 +218,10 @@ namespace IslandWorldGenerator
 
                 Raylib.BeginDrawing();
                 
-                // Fond sombre
                 Raylib.ClearBackground(new Color((byte)18, (byte)20, (byte)28, (byte)255));
 
-                // Rendu de la scène 3D
                 Raylib.BeginMode3D(camera);
 
-                // 1. Dessiner le maillage de terrain de l'île
                 if (_hasModel)
                 {
                     foreach (Model terrainModel in _terrainModels)
@@ -243,7 +230,6 @@ namespace IslandWorldGenerator
                     }
                 }
 
-                // 2. Dessiner la mer (eau translucide)
                 float waterHeight = _waterLevel * _maxHeight;
                 Vector3 waterPos = new Vector3(_mapWidth / 2.0f - 0.5f, waterHeight / 2.0f, _mapLength / 2.0f - 0.5f);
                 Raylib.DrawCube(
@@ -254,7 +240,6 @@ namespace IslandWorldGenerator
                     new Color((byte)30, (byte)100, (byte)190, (byte)140)
                 );
 
-                // 3. Dessiner la végétation
                 for (int x = 0; x < _mapWidth; x++)
                 {
                     for (int z = 0; z < _mapLength; z++)
@@ -267,7 +252,6 @@ namespace IslandWorldGenerator
 
                             if (block.Biome == BiomeType.Desert)
                             {
-                                // Cactus
                                 Vector3 trunkPos = new Vector3(x, block.Height + trunkH / 2.0f, z);
                                 Raylib.DrawCube(trunkPos, 0.2f, trunkH, 0.2f, block.FoliageColor);
                                 
@@ -281,7 +265,6 @@ namespace IslandWorldGenerator
                             }
                             else if (block.Biome == BiomeType.Taiga)
                             {
-                                // Sapin conique
                                 Vector3 trunkPos = new Vector3(x, block.Height + trunkH / 3.0f, z);
                                 Raylib.DrawCube(trunkPos, 0.15f, trunkH * 0.6f, 0.15f, new Color((byte)100, (byte)65, (byte)35, (byte)255));
 
@@ -296,7 +279,6 @@ namespace IslandWorldGenerator
                             }
                             else if (block.Biome != BiomeType.Beach && block.Biome != BiomeType.Mountain && block.Biome != BiomeType.Snow)
                             {
-                                // Arbre rond standard
                                 Vector3 trunkPos = new Vector3(x, block.Height + trunkH / 2.0f, z);
                                 Raylib.DrawCube(trunkPos, 0.2f, trunkH, 0.2f, new Color((byte)101, (byte)67, (byte)33, (byte)255));
 
@@ -309,10 +291,8 @@ namespace IslandWorldGenerator
                     }
                 }
 
-                // 4. Dessiner les habitants
                 DrawHumans();
 
-                // 5. Dessiner la bordure bleue de la carte à la surface de l'eau
                 float borderY = waterHeight + 0.05f;
                 Color borderColor = new Color((byte)0, (byte)150, (byte)255, (byte)100);
                 Raylib.DrawLine3D(new Vector3(0, borderY, 0), new Vector3(_mapWidth, borderY, 0), borderColor);
@@ -324,13 +304,11 @@ namespace IslandWorldGenerator
 
                 DrawHumanNames(camera, font);
 
-                // Rendu de l'interface graphique (HUD / Menu)
                 DrawInterface(biomeCounts, font, random);
 
                 Raylib.EndDrawing();
             }
 
-            // Nettoyage de la mémoire avant fermeture
             Raylib.UnloadFont(font);
             if (_hasModel)
             {
@@ -897,8 +875,6 @@ namespace IslandWorldGenerator
                     _persistence = Math.Min(0.80f, _persistence + 0.05f);
                     _needsRegen = true;
                 }
-                rowY += rowStep;
-
                 // Précision des contours de biomes
                 Raylib.DrawTextEx(font, "Précision contours", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
                 Raylib.DrawTextEx(font, $"x{_biomeEdgePrecision} (rendu biomes {_biomeEdgePrecision}x)", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
@@ -1313,6 +1289,10 @@ namespace IslandWorldGenerator
             return Raylib.LoadModelFromMesh(mesh);
         }
 
+        /*
+         * Decoupe une cellule de grille en triangles selon l'algorithme des Marching Squares
+         * pour obtenir des frontieres de biomes precises et nettes.
+         */
         private static void AddMarchingSquaresCellTriangles(WorldBlock[,] grid, int x, int z, float coordinateScale, List<TerrainTriangle> triangles)
         {
             int width = grid.GetLength(0);
@@ -1456,6 +1436,10 @@ namespace IslandWorldGenerator
             }
         }
 
+        /*
+         * Ajoute un triangle terrestre a la liste de rendu du terrain. Verifie et corrige
+         * l'ordre d'enroulement pour que la normale pointe vers le ciel.
+         */
         private static void AddTerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color color, List<TerrainTriangle> triangles)
         {
             Vector3 normal = Vector3.Cross(b - a, c - a);
@@ -1478,6 +1462,10 @@ namespace IslandWorldGenerator
             triangles.Add(new TerrainTriangle(a, b, c, nA, nB, nC, color));
         }
 
+        /*
+         * Calcule la normale d'un sommet en lissant son orientation grace aux altitudes
+         * des sommets environnants. Genere des ombres fluides.
+         */
         private static Vector3 GetSmoothNormal(WorldBlock[,] grid, int x, int z, int width, int length, float coordinateScale)
         {
             float hLeft = x > 0 ? grid[x - 1, z].Height : grid[x, z].Height;
