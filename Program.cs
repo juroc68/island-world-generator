@@ -875,13 +875,17 @@ namespace IslandWorldGenerator
                     _persistence = Math.Min(0.80f, _persistence + 0.05f);
                     _needsRegen = true;
                 }
+                rowY += rowStep;
+
                 // Précision des contours de biomes
                 Raylib.DrawTextEx(font, "Précision contours", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
                 Raylib.DrawTextEx(font, $"x{_biomeEdgePrecision} (rendu biomes {_biomeEdgePrecision}x)", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool clickPrecision1, clickPrecision2, clickPrecision4;
+                bool clickPrecision1, clickPrecision2, clickPrecision4, clickPrecision8, clickPrecision16;
                 DrawButton("x1", new Rectangle(inputX, rowY + 31, 50, 30), _biomeEdgePrecision == 1 ? btnActive : btnNormal, btnHover, font, out clickPrecision1);
                 DrawButton("x2", new Rectangle(inputX + 58, rowY + 31, 50, 30), _biomeEdgePrecision == 2 ? btnActive : btnNormal, btnHover, font, out clickPrecision2);
                 DrawButton("x4", new Rectangle(inputX + 116, rowY + 31, 50, 30), _biomeEdgePrecision == 4 ? btnActive : btnNormal, btnHover, font, out clickPrecision4);
+                DrawButton("x8", new Rectangle(inputX + 174, rowY + 31, 50, 30), _biomeEdgePrecision == 8 ? btnActive : btnNormal, btnHover, font, out clickPrecision8);
+                DrawButton("x16", new Rectangle(inputX + 232, rowY + 31, 50, 30), _biomeEdgePrecision == 16 ? btnActive : btnNormal, btnHover, font, out clickPrecision16);
                 if (clickPrecision1 && _biomeEdgePrecision != 1)
                 {
                     _biomeEdgePrecision = 1;
@@ -895,6 +899,16 @@ namespace IslandWorldGenerator
                 if (clickPrecision4 && _biomeEdgePrecision != 4 && _mapWidth <= 128)
                 {
                     _biomeEdgePrecision = 4;
+                    _needsRegen = true;
+                }
+                if (clickPrecision8 && _biomeEdgePrecision != 8 && _mapWidth <= 128)
+                {
+                    _biomeEdgePrecision = 8;
+                    _needsRegen = true;
+                }
+                if (clickPrecision16 && _biomeEdgePrecision != 16 && _mapWidth <= 128)
+                {
+                    _biomeEdgePrecision = 16;
                     _needsRegen = true;
                 }
                 rowY += rowStep;
