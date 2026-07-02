@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Raylib_cs;
@@ -54,7 +55,7 @@ namespace IslandWorldGenerator
             Raylib.SetConfigFlags(ConfigFlags.ResizableWindow | ConfigFlags.Msaa4xHint);
             
             // Initialisation de la fenêtre Raylib
-            Raylib.InitWindow(ScreenWidth, ScreenHeight, "Générateur d'Île 3D Procédural - 100% C#");
+            Raylib.InitWindow(ScreenWidth, ScreenHeight, "Générateur d'Île 3D Procédural");
             Raylib.SetTargetFPS(60);
 
             // Charger la police moderne avec le jeu Latin-1 (pour afficher correctement les accents français)
@@ -63,7 +64,8 @@ namespace IslandWorldGenerator
             {
                 codepoints[i] = 32 + i;
             }
-            Font font = Raylib.LoadFontEx("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", 32, codepoints, 224);
+            string fontPath = Path.Combine(AppContext.BaseDirectory, "assets", "fonts", "LiberationSans-Regular.ttf");
+            Font font = Raylib.LoadFontEx(fontPath, 32, codepoints, 224);
             Raylib.SetTextureFilter(font.Texture, TextureFilter.Bilinear);
 
             // Rendre le curseur visible

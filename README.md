@@ -48,5 +48,4 @@ dotnet run
 
 - .NET 8 SDK.
 - Raylib-cs est restauré automatiquement via NuGet.
-
-Sur Linux, l'application charge la police Liberation Sans depuis `/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf`.
+- La police utilisée par l'interface est embarquée dans `assets/fonts/`.
