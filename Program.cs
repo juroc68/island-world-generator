@@ -57,17 +57,23 @@ namespace IslandWorldGenerator
 
         private readonly struct TerrainTriangle
         {
-            public TerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Color color)
+            public TerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color color)
             {
                 A = a;
                 B = b;
                 C = c;
+                NormalA = nA;
+                NormalB = nB;
+                NormalC = nC;
                 Color = color;
             }
 
             public readonly Vector3 A;
             public readonly Vector3 B;
             public readonly Vector3 C;
+            public readonly Vector3 NormalA;
+            public readonly Vector3 NormalB;
+            public readonly Vector3 NormalC;
             public readonly Color Color;
         }
 
@@ -1198,6 +1204,8 @@ namespace IslandWorldGenerator
 
         private static unsafe Model GenerateSharpBiomeTerrainChunk(WorldBlock[,] grid, int startX, int startZ, int chunkWidth, int chunkLength, float coordinateScale)
         {
+            int gridWidth = grid.GetLength(0);
+            int gridLength = grid.GetLength(1);
             int quadCount = chunkWidth * chunkLength;
             Mesh mesh = new Mesh();
             mesh.VertexCount = quadCount * 4;
@@ -1221,13 +1229,17 @@ namespace IslandWorldGenerator
                     Vector3 topRight = new Vector3((x + 1) * coordinateScale, grid[x + 1, z].Height, z * coordinateScale);
                     Vector3 bottomLeft = new Vector3(x * coordinateScale, grid[x, z + 1].Height, (z + 1) * coordinateScale);
                     Vector3 bottomRight = new Vector3((x + 1) * coordinateScale, grid[x + 1, z + 1].Height, (z + 1) * coordinateScale);
-                    Vector3 normal = CalculateQuadNormal(topLeft, bottomLeft, topRight);
+
+                    Vector3 nTL = GetSmoothNormal(grid, x, z, gridWidth, gridLength, coordinateScale);
+                    Vector3 nTR = GetSmoothNormal(grid, x + 1, z, gridWidth, gridLength, coordinateScale);
+                    Vector3 nBL = GetSmoothNormal(grid, x, z + 1, gridWidth, gridLength, coordinateScale);
+                    Vector3 nBR = GetSmoothNormal(grid, x + 1, z + 1, gridWidth, gridLength, coordinateScale);
 
                     ushort baseIndex = (ushort)vertexIndex;
-                    WriteTerrainVertex(mesh, vertexIndex++, topLeft, normal, color);
-                    WriteTerrainVertex(mesh, vertexIndex++, bottomLeft, normal, color);
-                    WriteTerrainVertex(mesh, vertexIndex++, topRight, normal, color);
-                    WriteTerrainVertex(mesh, vertexIndex++, bottomRight, normal, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, topLeft, nTL, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, bottomLeft, nBL, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, topRight, nTR, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, bottomRight, nBR, color);
 
                     mesh.Indices[indexIndex++] = baseIndex;
                     mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
@@ -1286,12 +1298,11 @@ namespace IslandWorldGenerator
             int indexIndex = 0;
             foreach (TerrainTriangle triangle in triangles)
             {
-                Vector3 normal = CalculateQuadNormal(triangle.A, triangle.B, triangle.C);
                 ushort baseIndex = (ushort)vertexIndex;
 
-                WriteTerrainVertex(mesh, vertexIndex++, triangle.A, normal, triangle.Color);
-                WriteTerrainVertex(mesh, vertexIndex++, triangle.B, normal, triangle.Color);
-                WriteTerrainVertex(mesh, vertexIndex++, triangle.C, normal, triangle.Color);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.A, triangle.NormalA, triangle.Color);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.B, triangle.NormalB, triangle.Color);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.C, triangle.NormalC, triangle.Color);
 
                 mesh.Indices[indexIndex++] = baseIndex;
                 mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
@@ -1304,45 +1315,148 @@ namespace IslandWorldGenerator
 
         private static void AddMarchingSquaresCellTriangles(WorldBlock[,] grid, int x, int z, float coordinateScale, List<TerrainTriangle> triangles)
         {
+            int width = grid.GetLength(0);
+            int length = grid.GetLength(1);
+
             WorldBlock topLeftBlock = grid[x, z];
             WorldBlock topRightBlock = grid[x + 1, z];
             WorldBlock bottomLeftBlock = grid[x, z + 1];
             WorldBlock bottomRightBlock = grid[x + 1, z + 1];
 
-            Vector3 topLeft = GetBlockPosition(topLeftBlock, coordinateScale);
-            Vector3 topRight = GetBlockPosition(topRightBlock, coordinateScale);
-            Vector3 bottomLeft = GetBlockPosition(bottomLeftBlock, coordinateScale);
-            Vector3 bottomRight = GetBlockPosition(bottomRightBlock, coordinateScale);
-            Vector3 center = (topLeft + topRight + bottomLeft + bottomRight) * 0.25f;
+            Vector3 TL = GetBlockPosition(topLeftBlock, coordinateScale);
+            Vector3 TR = GetBlockPosition(topRightBlock, coordinateScale);
+            Vector3 BL = GetBlockPosition(bottomLeftBlock, coordinateScale);
+            Vector3 BR = GetBlockPosition(bottomRightBlock, coordinateScale);
 
-            AddMarchingEdgeTriangle(topLeft, bottomLeft, center, topLeftBlock.Biome, bottomLeftBlock.Biome, topLeftBlock.Color, bottomLeftBlock.Color, triangles);
-            AddMarchingEdgeTriangle(bottomLeft, bottomRight, center, bottomLeftBlock.Biome, bottomRightBlock.Biome, bottomLeftBlock.Color, bottomRightBlock.Color, triangles);
-            AddMarchingEdgeTriangle(bottomRight, topRight, center, bottomRightBlock.Biome, topRightBlock.Biome, bottomRightBlock.Color, topRightBlock.Color, triangles);
-            AddMarchingEdgeTriangle(topRight, topLeft, center, topRightBlock.Biome, topLeftBlock.Biome, topRightBlock.Color, topLeftBlock.Color, triangles);
-        }
+            Vector3 nTL = GetSmoothNormal(grid, x, z, width, length, coordinateScale);
+            Vector3 nTR = GetSmoothNormal(grid, x + 1, z, width, length, coordinateScale);
+            Vector3 nBL = GetSmoothNormal(grid, x, z + 1, width, length, coordinateScale);
+            Vector3 nBR = GetSmoothNormal(grid, x + 1, z + 1, width, length, coordinateScale);
 
-        private static void AddMarchingEdgeTriangle(
-            Vector3 first,
-            Vector3 second,
-            Vector3 center,
-            BiomeType firstBiome,
-            BiomeType secondBiome,
-            Color firstColor,
-            Color secondColor,
-            List<TerrainTriangle> triangles)
-        {
-            if (firstBiome == secondBiome)
+            Vector3 MT = (TL + TR) * 0.5f;
+            Vector3 MR = (TR + BR) * 0.5f;
+            Vector3 MB = (BL + BR) * 0.5f;
+            Vector3 ML = (TL + BL) * 0.5f;
+
+            Vector3 nMT = Vector3.Normalize(nTL + nTR);
+            Vector3 nMR = Vector3.Normalize(nTR + nBR);
+            Vector3 nMB = Vector3.Normalize(nBL + nBR);
+            Vector3 nML = Vector3.Normalize(nTL + nBL);
+
+            Vector3 center = (TL + TR + BL + BR) * 0.25f;
+            Vector3 nCenter = Vector3.Normalize(nTL + nTR + nBL + nBR);
+
+            Color colorTL = topLeftBlock.Color;
+            Color colorTR = topRightBlock.Color;
+            Color colorBL = bottomLeftBlock.Color;
+            Color colorBR = bottomRightBlock.Color;
+
+            BiomeType bTL = topLeftBlock.Biome;
+            BiomeType bTR = topRightBlock.Biome;
+            BiomeType bBL = bottomLeftBlock.Biome;
+            BiomeType bBR = bottomRightBlock.Biome;
+
+            var biomes = new List<BiomeType> { bTL, bTR, bBL, bBR };
+            var uniqueBiomes = new List<BiomeType>();
+            foreach (var b in biomes)
             {
-                AddTerrainTriangle(first, second, center, firstColor, triangles);
-                return;
+                if (!uniqueBiomes.Contains(b))
+                    uniqueBiomes.Add(b);
             }
+            int uniqueBiomesCount = uniqueBiomes.Count;
 
-            Vector3 cutPoint = Vector3.Lerp(first, second, 0.5f);
-            AddTerrainTriangle(first, cutPoint, center, firstColor, triangles);
-            AddTerrainTriangle(cutPoint, second, center, secondColor, triangles);
+            if (uniqueBiomesCount == 1)
+            {
+                AddTerrainTriangle(TL, TR, BL, nTL, nTR, nBL, colorTL, triangles);
+                AddTerrainTriangle(TR, BR, BL, nTR, nBR, nBL, colorTL, triangles);
+            }
+            else if (uniqueBiomesCount == 2)
+            {
+                BiomeType b1 = uniqueBiomes[0];
+                BiomeType b2 = uniqueBiomes[1];
+                int count1 = 0;
+                foreach (var b in biomes) if (b == b1) count1++;
+                int count2 = 4 - count1;
+
+                if (count1 == 3 || count2 == 3)
+                {
+                    BiomeType majorityBiome = count1 == 3 ? b1 : b2;
+                    BiomeType minorityBiome = count1 == 3 ? b2 : b1;
+                    Color majorityColor = bTL == majorityBiome ? colorTL : (bTR == majorityBiome ? colorTR : colorBL);
+                    Color minorityColor = bTL == minorityBiome ? colorTL : (bTR == minorityBiome ? colorTR : (bBL == minorityBiome ? colorBL : colorBR));
+
+                    if (bTL == minorityBiome)
+                    {
+                        AddTerrainTriangle(TL, MT, ML, nTL, nMT, nML, minorityColor, triangles);
+                        AddTerrainTriangle(TR, BR, BL, nTR, nBR, nBL, majorityColor, triangles);
+                        AddTerrainTriangle(TR, BL, ML, nTR, nBL, nML, majorityColor, triangles);
+                        AddTerrainTriangle(TR, ML, MT, nTR, nML, nMT, majorityColor, triangles);
+                    }
+                    else if (bTR == minorityBiome)
+                    {
+                        AddTerrainTriangle(TR, MR, MT, nTR, nMR, nMT, minorityColor, triangles);
+                        AddTerrainTriangle(TL, BR, BL, nTL, nBR, nBL, majorityColor, triangles);
+                        AddTerrainTriangle(TL, MR, BR, nTL, nMR, nBR, majorityColor, triangles);
+                        AddTerrainTriangle(TL, MT, MR, nTL, nMT, nMR, majorityColor, triangles);
+                    }
+                    else if (bBL == minorityBiome)
+                    {
+                        AddTerrainTriangle(BL, ML, MB, nBL, nML, nMB, minorityColor, triangles);
+                        AddTerrainTriangle(TL, TR, BR, nTL, nTR, nBR, majorityColor, triangles);
+                        AddTerrainTriangle(TL, BR, MB, nTL, nBR, nMB, majorityColor, triangles);
+                        AddTerrainTriangle(TL, MB, ML, nTL, nMB, nML, majorityColor, triangles);
+                    }
+                    else
+                    {
+                        AddTerrainTriangle(BR, MB, MR, nBR, nMB, nMR, minorityColor, triangles);
+                        AddTerrainTriangle(TL, TR, MR, nTL, nTR, nMR, majorityColor, triangles);
+                        AddTerrainTriangle(TL, MR, BL, nTL, nMR, nBL, majorityColor, triangles);
+                        AddTerrainTriangle(BL, MR, MB, nBL, nMR, nMB, majorityColor, triangles);
+                    }
+                }
+                else
+                {
+                    if (bTL == bTR && bBL == bBR)
+                    {
+                        AddTerrainTriangle(TL, TR, ML, nTL, nTR, nML, colorTL, triangles);
+                        AddTerrainTriangle(TR, MR, ML, nTR, nMR, nML, colorTL, triangles);
+                        AddTerrainTriangle(BL, BR, ML, nBL, nBR, nML, colorBL, triangles);
+                        AddTerrainTriangle(BR, MR, ML, nBR, nMR, nML, colorBL, triangles);
+                    }
+                    else if (bTL == bBL && bTR == bBR)
+                    {
+                        AddTerrainTriangle(TL, MT, BL, nTL, nMT, nBL, colorTL, triangles);
+                        AddTerrainTriangle(MT, MB, BL, nMT, nMB, nBL, colorTL, triangles);
+                        AddTerrainTriangle(TR, MT, BR, nTR, nMT, nBR, colorTR, triangles);
+                        AddTerrainTriangle(MT, MB, BR, nMT, nMB, nBR, colorTR, triangles);
+                    }
+                    else
+                    {
+                        AddTerrainTriangle(TL, ML, center, nTL, nML, nCenter, colorTL, triangles);
+                        AddTerrainTriangle(ML, BL, center, nML, nBL, nCenter, colorBL, triangles);
+                        AddTerrainTriangle(BL, MB, center, nBL, nMB, nCenter, colorBL, triangles);
+                        AddTerrainTriangle(MB, BR, center, nMB, nBR, nCenter, colorBR, triangles);
+                        AddTerrainTriangle(BR, MR, center, nBR, nMR, nCenter, colorBR, triangles);
+                        AddTerrainTriangle(MR, TR, center, nMR, nTR, nCenter, colorTR, triangles);
+                        AddTerrainTriangle(TR, MT, center, nTR, nMT, nCenter, colorTR, triangles);
+                        AddTerrainTriangle(MT, TL, center, nMT, nTL, nCenter, colorTL, triangles);
+                    }
+                }
+            }
+            else
+            {
+                AddTerrainTriangle(TL, ML, center, nTL, nML, nCenter, colorTL, triangles);
+                AddTerrainTriangle(ML, BL, center, nML, nBL, nCenter, colorBL, triangles);
+                AddTerrainTriangle(BL, MB, center, nBL, nMB, nCenter, colorBL, triangles);
+                AddTerrainTriangle(MB, BR, center, nMB, nBR, nCenter, colorBR, triangles);
+                AddTerrainTriangle(BR, MR, center, nBR, nMR, nCenter, colorBR, triangles);
+                AddTerrainTriangle(MR, TR, center, nMR, nTR, nCenter, colorTR, triangles);
+                AddTerrainTriangle(TR, MT, center, nTR, nMT, nCenter, colorTR, triangles);
+                AddTerrainTriangle(MT, TL, center, nMT, nTL, nCenter, colorTL, triangles);
+            }
         }
 
-        private static void AddTerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Color color, List<TerrainTriangle> triangles)
+        private static void AddTerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color color, List<TerrainTriangle> triangles)
         {
             Vector3 normal = Vector3.Cross(b - a, c - a);
             if (normal.LengthSquared() < 0.000001f)
@@ -1350,7 +1464,29 @@ namespace IslandWorldGenerator
                 return;
             }
 
-            triangles.Add(new TerrainTriangle(a, b, c, color));
+            if (normal.Y < 0.0f)
+            {
+                Vector3 temp = b;
+                b = c;
+                c = temp;
+
+                Vector3 tempN = nB;
+                nB = nC;
+                nC = tempN;
+            }
+
+            triangles.Add(new TerrainTriangle(a, b, c, nA, nB, nC, color));
+        }
+
+        private static Vector3 GetSmoothNormal(WorldBlock[,] grid, int x, int z, int width, int length, float coordinateScale)
+        {
+            float hLeft = x > 0 ? grid[x - 1, z].Height : grid[x, z].Height;
+            float hRight = x < width - 1 ? grid[x + 1, z].Height : grid[x, z].Height;
+            float hTop = z > 0 ? grid[x, z - 1].Height : grid[x, z].Height;
+            float hBottom = z < length - 1 ? grid[x, z + 1].Height : grid[x, z].Height;
+
+            Vector3 normal = new Vector3(hLeft - hRight, 2.0f * coordinateScale, hTop - hBottom);
+            return Vector3.Normalize(normal);
         }
 
         private static Vector3 GetBlockPosition(WorldBlock block, float coordinateScale)
