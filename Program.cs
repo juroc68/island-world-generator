@@ -40,8 +40,9 @@ namespace IslandWorldGenerator
         private static bool _showMenu = true;
         private static bool _showGrid3D = false;
 
-        // Gestion des onglets
-        private static int _activeTab = 0; // 0: Terrain & Hauteur, 1: Climat & Surface, 2: Configuration, 3: Aide
+        private static float _scrollOffset = 0.0f;
+        private static bool _isDraggingScrollbar = false;
+
         private static string? _activeNumberInput = null;
         private static string _numberInputText = "";
 
@@ -565,20 +566,21 @@ namespace IslandWorldGenerator
             int currentScreenWidth = Raylib.GetScreenWidth();
             int currentScreenHeight = Raylib.GetScreenHeight();
 
-            // Zoom avec la molette de la souris
+            Vector2 mousePos = Raylib.GetMousePosition();
+            bool insideLeftMenu = _showMenu && (mousePos.X < 380);
+            bool insideRightMenu = _showMenu && (mousePos.X > currentScreenWidth - 240 && mousePos.Y < 250);
+
+            // Zoom avec la molette de la souris (seulement si hors des menus)
             float wheelMove = Raylib.GetMouseWheelMove();
-            _cameraDistance -= wheelMove * (_mapWidth * 0.05f);
-            _cameraDistance = Math.Clamp(_cameraDistance, 15.0f, _mapWidth * 2.5f);
+            if (!insideLeftMenu && !insideRightMenu)
+            {
+                _cameraDistance -= wheelMove * (_mapWidth * 0.05f);
+                _cameraDistance = Math.Clamp(_cameraDistance, 15.0f, _mapWidth * 2.5f);
+            }
 
             // Déplacement orbital
             if (Raylib.IsMouseButtonDown(MouseButton.Right) || Raylib.IsMouseButtonDown(MouseButton.Left))
             {
-                Vector2 mousePos = Raylib.GetMousePosition();
-                
-                // Ignorer les clics dans les panneaux d'interface.
-                bool insideLeftMenu = _showMenu && (mousePos.X < 380);
-                bool insideRightMenu = _showMenu && (mousePos.X > currentScreenWidth - 240 && mousePos.Y < 230);
-
                 if (!insideLeftMenu && !insideRightMenu)
                 {
                     Vector2 mouseDelta = Raylib.GetMouseDelta();
@@ -786,384 +788,452 @@ namespace IslandWorldGenerator
             Raylib.DrawTextEx(font, "PARAMETRES DU MONDE", new Vector2(33, 30), 15f, 1.0f, new Color((byte)0, (byte)180, (byte)255, (byte)255));
             Raylib.DrawLine(33, 51, 347, 51, new Color((byte)255, (byte)255, (byte)255, (byte)35));
 
-            string[] tabs = { "Terrain & relief", "Climat & surface", "Monde", "Aide" };
-            float tabY = 64f;
-            for (int i = 0; i < tabs.Length; i++)
+            float viewportHeight = currentScreenHeight - 90;
+            float totalContentHeight = 1470f;
+            float maxScroll = Math.Max(0.0f, totalContentHeight - viewportHeight);
+
+            float trackY = 65f;
+            float trackHeight = viewportHeight - 10f;
+            float handleHeight = Math.Max(20f, (viewportHeight / totalContentHeight) * trackHeight);
+            float handleY = trackY + (_scrollOffset / maxScroll) * (trackHeight - handleHeight);
+            Rectangle scrollbarRec = new Rectangle(356, trackY, 6, trackHeight);
+            Rectangle handleRec = new Rectangle(356, handleY, 6, handleHeight);
+
+            Vector2 mousePos = Raylib.GetMousePosition();
+
+            if (Raylib.IsMouseButtonPressed(MouseButton.Left))
             {
-                bool tabClicked;
-                Rectangle tabRect = new Rectangle(33, tabY, 314, 28);
-                Color tabCol = (_activeTab == i) ? btnActive : btnNormal;
-                DrawButton(tabs[i], tabRect, tabCol, btnHover, font, out tabClicked);
-                if (tabClicked)
+                if (Raylib.CheckCollisionPointRec(mousePos, handleRec))
                 {
-                    _activeTab = i;
+                    _isDraggingScrollbar = true;
                 }
-                tabY += 34f;
             }
 
-            Raylib.DrawLine(33, 205, 347, 205, new Color((byte)255, (byte)255, (byte)255, (byte)35));
+            if (Raylib.IsMouseButtonReleased(MouseButton.Left))
+            {
+                _isDraggingScrollbar = false;
+            }
+
+            if (_isDraggingScrollbar && Raylib.IsMouseButtonDown(MouseButton.Left))
+            {
+                float relativeY = mousePos.Y - trackY - handleHeight * 0.5f;
+                float ratio = relativeY / (trackHeight - handleHeight);
+                _scrollOffset = Math.Clamp(ratio * maxScroll, 0.0f, maxScroll);
+            }
+
+            Rectangle leftViewportRec = new Rectangle(15, 60, 350, viewportHeight);
+            if (Raylib.CheckCollisionPointRec(mousePos, leftViewportRec))
+            {
+                float wheel = Raylib.GetMouseWheelMove();
+                _scrollOffset = Math.Clamp(_scrollOffset - wheel * 45.0f, 0.0f, maxScroll);
+            }
+
+            // Dessin du fond de la barre de défilement
+            Raylib.DrawRectangleRec(scrollbarRec, new Color((byte)30, (byte)35, (byte)45, (byte)150));
+            // Dessin du curseur de la barre de défilement
+            Color handleColor = _isDraggingScrollbar ? btnActive : new Color((byte)100, (byte)115, (byte)140, (byte)200);
+            if (Raylib.CheckCollisionPointRec(mousePos, handleRec))
+            {
+                handleColor = btnHover;
+            }
+            Raylib.DrawRectangleRec(handleRec, handleColor);
+
+            Raylib.BeginScissorMode(15, 60, 350, (int)viewportHeight);
+
+            float scroll = _scrollOffset;
 
             float rowX = 33f;
-            float rowY = 221f;
+            float rowY = 70f;
             float rowStep = 66f;
             float inputX = 33f;
             float inputWidth = 82f;
             float minusX = 124f;
             float plusX = 166f;
+            void DrawGroupHeader(string title, ref float y)
+            {
+                Raylib.DrawRectangleRec(new Rectangle(25, y - scroll, 330, 24), new Color((byte)25, (byte)35, (byte)50, (byte)180));
+                Raylib.DrawTextEx(font, title.ToUpper(), new Vector2(33, y + 5 - scroll), 11f, 1.0f, new Color((byte)0, (byte)180, (byte)255, (byte)255));
+                y += 34f;
+            }
+
             // ==========================================
-            // RENDU DU CONTENU SELON L'ONGLET ACTIF
+            // GROUP 1: MONDE
             // ==========================================
-            if (_activeTab == 0)
+            DrawGroupHeader("1. Monde", ref rowY);
+
+            // Graine
+            Raylib.DrawTextEx(font, "Graine", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{_seed} (seed {_seed})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawIntInput("seed", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref _seed, 1, 999999))
             {
-                // Onglet 0: Terrain & Relief
-                // Graine
-                Raylib.DrawTextEx(font, "Graine", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_seed} (seed {_seed})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawIntInput("seed", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _seed, 1, 999999))
-                {
-                    _needsRegen = true;
-                }
-                bool clickRegen;
-                DrawButton("Nouvelle", new Rectangle(minusX, rowY + 31, 112, 30), btnNormal, btnHover, font, out clickRegen);
-                if (clickRegen)
-                {
-                    _seed = random.Next(1, 100000);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Échelle du relief : affichée en tuiles, stockée en fréquence de bruit.
-                float reliefScaleTiles = 1.0f / _scale;
-                Raylib.DrawTextEx(font, "Taille des reliefs", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{reliefScaleTiles:F0} tuiles (scale {_scale:F4})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawFloatInput("relief-scale", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref reliefScaleTiles, 8f, 200f, 0))
-                {
-                    _scale = Math.Clamp(1.0f / reliefScaleTiles, 0.005f, 0.12f);
-                    _needsRegen = true;
-                }
-                bool scaleMinus, scalePlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out scaleMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out scalePlus);
-                if (scaleMinus)
-                {
-                    reliefScaleTiles = Math.Max(8f, reliefScaleTiles - 5f);
-                    _scale = Math.Clamp(1.0f / reliefScaleTiles, 0.005f, 0.12f);
-                    _needsRegen = true;
-                }
-                if (scalePlus)
-                {
-                    reliefScaleTiles = Math.Min(200f, reliefScaleTiles + 5f);
-                    _scale = Math.Clamp(1.0f / reliefScaleTiles, 0.005f, 0.12f);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Hauteur Max
-                Raylib.DrawTextEx(font, "Hauteur maximale", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_maxHeight:F0} blocs (maxHeight {_maxHeight:F1})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawFloatInput("max-height", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _maxHeight, 5f, 40f, 0))
-                {
-                    _needsRegen = true;
-                }
-                bool heightMinus, heightPlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out heightMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out heightPlus);
-                if (heightMinus)
-                {
-                    _maxHeight = Math.Max(5f, _maxHeight - 1f);
-                    _needsRegen = true;
-                }
-                if (heightPlus)
-                {
-                    _maxHeight = Math.Min(40f, _maxHeight + 1f);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Variations Relief (Persistance)
-                float roughnessPercent = _persistence * 100.0f;
-                Raylib.DrawTextEx(font, "Rugosité", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{roughnessPercent:F0}% (persistence {_persistence:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawFloatInput("roughness", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref roughnessPercent, 10f, 80f, 0))
-                {
-                    _persistence = Math.Clamp(roughnessPercent / 100.0f, 0.10f, 0.80f);
-                    _needsRegen = true;
-                }
-                bool persistenceMinus, persistencePlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out persistenceMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out persistencePlus);
-                if (persistenceMinus)
-                {
-                    _persistence = Math.Max(0.10f, _persistence - 0.05f);
-                    _needsRegen = true;
-                }
-                if (persistencePlus)
-                {
-                    _persistence = Math.Min(0.80f, _persistence + 0.05f);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Précision des contours de biomes
-                Raylib.DrawTextEx(font, "Précision contours", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"x{_biomeEdgePrecision} (rendu biomes {_biomeEdgePrecision}x)", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool clickPrecision1, clickPrecision2, clickPrecision4, clickPrecision8, clickPrecision16;
-                DrawButton("x1", new Rectangle(inputX, rowY + 31, 50, 30), _biomeEdgePrecision == 1 ? btnActive : btnNormal, btnHover, font, out clickPrecision1);
-                DrawButton("x2", new Rectangle(inputX + 58, rowY + 31, 50, 30), _biomeEdgePrecision == 2 ? btnActive : btnNormal, btnHover, font, out clickPrecision2);
-                DrawButton("x4", new Rectangle(inputX + 116, rowY + 31, 50, 30), _biomeEdgePrecision == 4 ? btnActive : btnNormal, btnHover, font, out clickPrecision4);
-                DrawButton("x8", new Rectangle(inputX + 174, rowY + 31, 50, 30), _biomeEdgePrecision == 8 ? btnActive : btnNormal, btnHover, font, out clickPrecision8);
-                DrawButton("x16", new Rectangle(inputX + 232, rowY + 31, 50, 30), _biomeEdgePrecision == 16 ? btnActive : btnNormal, btnHover, font, out clickPrecision16);
-                if (clickPrecision1 && _biomeEdgePrecision != 1)
-                {
-                    _biomeEdgePrecision = 1;
-                    _needsRegen = true;
-                }
-                if (clickPrecision2 && _biomeEdgePrecision != 2)
-                {
-                    _biomeEdgePrecision = 2;
-                    _needsRegen = true;
-                }
-                if (clickPrecision4 && _biomeEdgePrecision != 4 && _mapWidth <= 128)
-                {
-                    _biomeEdgePrecision = 4;
-                    _needsRegen = true;
-                }
-                if (clickPrecision8 && _biomeEdgePrecision != 8 && _mapWidth <= 128)
-                {
-                    _biomeEdgePrecision = 8;
-                    _needsRegen = true;
-                }
-                if (clickPrecision16 && _biomeEdgePrecision != 16 && _mapWidth <= 128)
-                {
-                    _biomeEdgePrecision = 16;
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Méthode de rendu des frontières
-                string boundaryModeText = _biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares
-                    ? "Courbes (marching squares)"
-                    : "Tuiles nettes (quads)";
-                Raylib.DrawTextEx(font, "Mode contours", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, boundaryModeText, new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool clickSharpTiles, clickMarchingSquares;
-                DrawButton("Tuiles", new Rectangle(inputX, rowY + 31, 78, 30), _biomeBoundaryMode == BiomeBoundaryMode.SharpTiles ? btnActive : btnNormal, btnHover, font, out clickSharpTiles);
-                DrawButton("Courbes", new Rectangle(inputX + 86, rowY + 31, 92, 30), _biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares ? btnActive : btnNormal, btnHover, font, out clickMarchingSquares);
-                if (clickSharpTiles && _biomeBoundaryMode != BiomeBoundaryMode.SharpTiles)
-                {
-                    _biomeBoundaryMode = BiomeBoundaryMode.SharpTiles;
-                    _needsRegen = true;
-                }
-                if (clickMarchingSquares && _biomeBoundaryMode != BiomeBoundaryMode.MarchingSquares)
-                {
-                    _biomeBoundaryMode = BiomeBoundaryMode.MarchingSquares;
-                    _needsRegen = true;
-                }
-
-                rowY += rowStep;
-
-                Raylib.DrawTextEx(font, "Grille 3D", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                string gridText = _showGrid3D ? "Activee" : "Desactivee";
-                Raylib.DrawTextEx(font, gridText, new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool clickGridOn, clickGridOff;
-                DrawButton("Oui", new Rectangle(inputX, rowY + 31, 78, 30), _showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOn);
-                DrawButton("Non", new Rectangle(inputX + 86, rowY + 31, 78, 30), !_showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOff);
-                if (clickGridOn) _showGrid3D = true;
-                if (clickGridOff) _showGrid3D = false;
+                _needsRegen = true;
             }
-            else if (_activeTab == 1)
+            bool clickRegen;
+            DrawButton("Nouvelle", new Rectangle(minusX, rowY + 31 - scroll, 112, 30), btnNormal, btnHover, font, out clickRegen);
+            if (clickRegen)
             {
-                // Onglet 1: Climat & Surface
-                // Niveau d'eau
-                float waterPercent = _waterLevel * 100.0f;
-                Raylib.DrawTextEx(font, "Niveau d'eau", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{waterPercent:F0}% (waterLevel {_waterLevel:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawFloatInput("water-level", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref waterPercent, 5f, 50f, 0))
-                {
-                    _waterLevel = Math.Clamp(waterPercent / 100.0f, 0.05f, 0.50f);
-                    _needsRegen = true;
-                }
-                bool waterMinus, waterPlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out waterMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out waterPlus);
-                if (waterMinus)
-                {
-                    _waterLevel = Math.Max(0.05f, _waterLevel - 0.02f);
-                    _needsRegen = true;
-                }
-                if (waterPlus)
-                {
-                    _waterLevel = Math.Min(0.5f, _waterLevel + 0.02f);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Humidité
-                float moistureValue = _moistureShift * 100.0f;
-                float humidityEquivalent = Math.Clamp(50.0f + moistureValue, 0.0f, 100.0f);
-                Raylib.DrawTextEx(font, "Humidité", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{moistureValue:+0;-0;0} / {humidityEquivalent:F0}% (shift {_moistureShift:+0.00;-0.00;0.00})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawFloatInput("moisture", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref moistureValue, -50f, 50f, 0))
-                {
-                    _moistureShift = Math.Clamp(moistureValue / 100.0f, -0.50f, 0.50f);
-                    _needsRegen = true;
-                }
-                bool moistMinus, moistPlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out moistMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out moistPlus);
-                if (moistMinus)
-                {
-                    _moistureShift = Math.Max(-0.5f, _moistureShift - 0.05f);
-                    _needsRegen = true;
-                }
-                if (moistPlus)
-                {
-                    _moistureShift = Math.Min(0.5f, _moistureShift + 0.05f);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Température Celsius
-                string tempText = _temperatureCelsius > 0 ? $"+{_temperatureCelsius}°C" : $"{_temperatureCelsius}°C";
-                float tempShiftValue = (_temperatureCelsius - 15.0f) * 0.008f;
-                Raylib.DrawTextEx(font, "Température", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{tempText} (tempShift {tempShiftValue:+0.000;-0.000;0.000})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawIntInput("temperature", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _temperatureCelsius, -50, 70))
-                {
-                    _needsRegen = true;
-                }
-                bool tempMinus, tempPlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out tempMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out tempPlus);
-                if (tempMinus)
-                {
-                    _temperatureCelsius = Math.Max(-50, _temperatureCelsius - 10);
-                    _needsRegen = true;
-                }
-                if (tempPlus)
-                {
-                    _temperatureCelsius = Math.Min(70, _temperatureCelsius + 10);
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Surface de l'île
-                float islandPercent = _islandSize * 100.0f;
-                Raylib.DrawTextEx(font, "Surface de l'île", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{islandPercent:F0}% (islandSize {_islandSize:F2})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawFloatInput("island-size", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref islandPercent, 20f, 400f, 0))
-                {
-                    _islandSize = Math.Clamp(islandPercent / 100.0f, 0.20f, 4.00f);
-                    _needsRegen = true;
-                }
-                bool sizeMinus, sizePlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out sizeMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out sizePlus);
-                if (sizeMinus)
-                {
-                    _islandSize = Math.Max(0.2f, _islandSize - 0.05f);
-                    _needsRegen = true;
-                }
-                if (sizePlus)
-                {
-                    _islandSize = Math.Min(4.0f, _islandSize + 0.05f);
-                    _needsRegen = true;
-                }
+                _seed = random.Next(1, 100000);
+                _needsRegen = true;
             }
-            else if (_activeTab == 2)
+            rowY += rowStep;
+
+            // Taille du monde
+            Raylib.DrawTextEx(font, "Taille du monde", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{_mapWidth} x {_mapLength} tuiles (map {_mapWidth})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool click64, click128, click256;
+            DrawButton("64", new Rectangle(inputX, rowY + 31 - scroll, 58, 30), _mapWidth == 64 ? btnActive : btnNormal, btnHover, font, out click64);
+            DrawButton("128", new Rectangle(inputX + 66, rowY + 31 - scroll, 58, 30), _mapWidth == 128 ? btnActive : btnNormal, btnHover, font, out click128);
+            DrawButton("256", new Rectangle(inputX + 132, rowY + 31 - scroll, 58, 30), _mapWidth == 256 ? btnActive : btnNormal, btnHover, font, out click256);
+            if (click64 && _mapWidth != 64)
             {
-                // Onglet 2: Paramètres Monde & Système
-                // Taille du monde
-                Raylib.DrawTextEx(font, "Taille du monde", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_mapWidth} x {_mapLength} tuiles (map {_mapWidth})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool click64, click128, click256;
-                DrawButton("64", new Rectangle(inputX, rowY + 31, 58, 30), _mapWidth == 64 ? btnActive : btnNormal, btnHover, font, out click64);
-                DrawButton("128", new Rectangle(inputX + 66, rowY + 31, 58, 30), _mapWidth == 128 ? btnActive : btnNormal, btnHover, font, out click128);
-                DrawButton("256", new Rectangle(inputX + 132, rowY + 31, 58, 30), _mapWidth == 256 ? btnActive : btnNormal, btnHover, font, out click256);
-                
-                if (click64 && _mapWidth != 64)
-                {
-                    _mapWidth = 64; _mapLength = 64;
-                    ResetCamera();
-                    _needsRegen = true;
-                }
-                if (click128 && _mapWidth != 128)
-                {
-                    _mapWidth = 128; _mapLength = 128;
-                    ResetCamera();
-                    _needsRegen = true;
-                }
-                if (click256 && _mapWidth != 256)
-                {
-                    _mapWidth = 256; _mapLength = 256;
-                    _biomeEdgePrecision = Math.Min(_biomeEdgePrecision, 2);
-                    ResetCamera();
-                    _needsRegen = true;
-                }
-                rowY += rowStep;
-
-                // Habitants
-                Raylib.DrawTextEx(font, "Habitants", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"{_humanCount} personnages (humanCount {_humanCount})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                if (DrawIntInput("humans", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _humanCount, 0, 200))
-                {
-                    SyncHumanCount();
-                }
-                bool humansMinus, humansPlus;
-                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out humansMinus);
-                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out humansPlus);
-                if (humansMinus)
-                {
-                    _humanCount = Math.Max(0, _humanCount - 1);
-                    SyncHumanCount();
-                }
-                if (humansPlus)
-                {
-                    _humanCount = Math.Min(200, _humanCount + 1);
-                    SyncHumanCount();
-                }
-                rowY += rowStep;
-
-                // Caméra
-                Raylib.DrawTextEx(font, "Caméra", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "Recentrer la vue orbitale", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool clickResetCam;
-                DrawButton("Réinitialiser [R]", new Rectangle(inputX, rowY + 31, 190, 30), new Color((byte)45, (byte)55, (byte)75, (byte)255), new Color((byte)80, (byte)95, (byte)125, (byte)255), font, out clickResetCam);
-                if (clickResetCam)
-                {
-                    ResetCamera();
-                }
-                rowY += rowStep;
-
-                // Masquage interface
-                Raylib.DrawTextEx(font, "Affichage", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "Masquer le panneau de contrôle", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-                bool clickHide2;
-                DrawButton("Masquer [H]", new Rectangle(inputX, rowY + 31, 190, 30), btnNormal, new Color((byte)180, (byte)50, (byte)50, (byte)255), font, out clickHide2);
-                if (clickHide2)
-                {
-                    _showMenu = false;
-                }
-                rowY += rowStep;
-
-                // Affichage FPS (adapté au bord droit)
-                Raylib.DrawTextEx(font, "Performances", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, $"FPS: {Raylib.GetFPS()}", new Vector2(rowX, rowY + 22), 14f, 1.0f, Color.Lime);
+                _mapWidth = 64; _mapLength = 64;
+                ResetCamera();
+                _needsRegen = true;
             }
-            else if (_activeTab == 3)
+            if (click128 && _mapWidth != 128)
             {
-                // Onglet 3: Raccourcis & Aide (Texte d'aide très grand et lisible)
-                Raylib.DrawTextEx(font, "Souris", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "Clic gauche/droit glissé : rotation", new Vector2(rowX, rowY + 20), 12f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "Molette : zoom", new Vector2(rowX, rowY + 39), 12f, 1.0f, Color.LightGray);
-                rowY += 78f;
-
-                Raylib.DrawTextEx(font, "Clavier", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "ZQSD / WASD / flèches : déplacer", new Vector2(rowX, rowY + 20), 12f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "R : réinitialiser la caméra", new Vector2(rowX, rowY + 39), 12f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "H ou Tab : masquer le menu", new Vector2(rowX, rowY + 58), 12f, 1.0f, Color.LightGray);
-                Raylib.DrawTextEx(font, "Espace : nouvelle graine", new Vector2(rowX, rowY + 77), 12f, 1.0f, Color.LightGray);
+                _mapWidth = 128; _mapLength = 128;
+                ResetCamera();
+                _needsRegen = true;
             }
+            if (click256 && _mapWidth != 256)
+            {
+                _mapWidth = 256; _mapLength = 256;
+                _biomeEdgePrecision = Math.Min(_biomeEdgePrecision, 2);
+                ResetCamera();
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // Surface de l'île
+            float islandPercent = _islandSize * 100.0f;
+            Raylib.DrawTextEx(font, "Surface de l'île", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{islandPercent:F0}% (islandSize {_islandSize:F2})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawFloatInput("island-size", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref islandPercent, 20f, 400f, 0))
+            {
+                _islandSize = Math.Clamp(islandPercent / 100.0f, 0.20f, 4.00f);
+                _needsRegen = true;
+            }
+            bool sizeMinus, sizePlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out sizeMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out sizePlus);
+            if (sizeMinus)
+            {
+                _islandSize = Math.Max(0.2f, _islandSize - 0.05f);
+                _needsRegen = true;
+            }
+            if (sizePlus)
+            {
+                _islandSize = Math.Min(4.0f, _islandSize + 0.05f);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // ==========================================
+            // GROUP 2: CONTOURS
+            // ==========================================
+            DrawGroupHeader("2. Contours", ref rowY);
+
+            // Mode contours
+            string boundaryModeText = _biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares
+                ? "Courbes (marching squares)"
+                : "Tuiles nettes (quads)";
+            Raylib.DrawTextEx(font, "Mode contours", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, boundaryModeText, new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickSharpTiles, clickMarchingSquares;
+            DrawButton("Tuiles", new Rectangle(inputX, rowY + 31 - scroll, 78, 30), _biomeBoundaryMode == BiomeBoundaryMode.SharpTiles ? btnActive : btnNormal, btnHover, font, out clickSharpTiles);
+            DrawButton("Courbes", new Rectangle(inputX + 86, rowY + 31 - scroll, 92, 30), _biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares ? btnActive : btnNormal, btnHover, font, out clickMarchingSquares);
+            if (clickSharpTiles && _biomeBoundaryMode != BiomeBoundaryMode.SharpTiles)
+            {
+                _biomeBoundaryMode = BiomeBoundaryMode.SharpTiles;
+                _needsRegen = true;
+            }
+            if (clickMarchingSquares && _biomeBoundaryMode != BiomeBoundaryMode.MarchingSquares)
+            {
+                _biomeBoundaryMode = BiomeBoundaryMode.MarchingSquares;
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // Précision contours
+            Raylib.DrawTextEx(font, "Précision contours", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"x{_biomeEdgePrecision} (rendu biomes {_biomeEdgePrecision}x)", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickPrecision1, clickPrecision2, clickPrecision4, clickPrecision8, clickPrecision16;
+            DrawButton("x1", new Rectangle(inputX, rowY + 31 - scroll, 50, 30), _biomeEdgePrecision == 1 ? btnActive : btnNormal, btnHover, font, out clickPrecision1);
+            DrawButton("x2", new Rectangle(inputX + 58, rowY + 31 - scroll, 50, 30), _biomeEdgePrecision == 2 ? btnActive : btnNormal, btnHover, font, out clickPrecision2);
+            DrawButton("x4", new Rectangle(inputX + 116, rowY + 31 - scroll, 50, 30), _biomeEdgePrecision == 4 ? btnActive : btnNormal, btnHover, font, out clickPrecision4);
+            DrawButton("x8", new Rectangle(inputX + 174, rowY + 31 - scroll, 50, 30), _biomeEdgePrecision == 8 ? btnActive : btnNormal, btnHover, font, out clickPrecision8);
+            DrawButton("x16", new Rectangle(inputX + 232, rowY + 31 - scroll, 50, 30), _biomeEdgePrecision == 16 ? btnActive : btnNormal, btnHover, font, out clickPrecision16);
+            if (clickPrecision1 && _biomeEdgePrecision != 1)
+            {
+                _biomeEdgePrecision = 1;
+                _needsRegen = true;
+            }
+            if (clickPrecision2 && _biomeEdgePrecision != 2)
+            {
+                _biomeEdgePrecision = 2;
+                _needsRegen = true;
+            }
+            if (clickPrecision4 && _biomeEdgePrecision != 4 && _mapWidth <= 128)
+            {
+                _biomeEdgePrecision = 4;
+                _needsRegen = true;
+            }
+            if (clickPrecision8 && _biomeEdgePrecision != 8 && _mapWidth <= 128)
+            {
+                _biomeEdgePrecision = 8;
+                _needsRegen = true;
+            }
+            if (clickPrecision16 && _biomeEdgePrecision != 16 && _mapWidth <= 128)
+            {
+                _biomeEdgePrecision = 16;
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // ==========================================
+            // GROUP 3: RELIEFS
+            // ==========================================
+            DrawGroupHeader("3. Reliefs", ref rowY);
+
+            // Échelle du relief
+            float scaleTiles = 1.0f / _scale;
+            Raylib.DrawTextEx(font, "Taille des reliefs", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{scaleTiles:F0} tuiles (scale {_scale:F4})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawFloatInput("relief-scale", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref scaleTiles, 8f, 200f, 0))
+            {
+                _scale = Math.Clamp(1.0f / scaleTiles, 0.005f, 0.12f);
+                _needsRegen = true;
+            }
+            bool scaleMinus, scalePlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out scaleMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out scalePlus);
+            if (scaleMinus)
+            {
+                scaleTiles = Math.Max(8f, scaleTiles - 5f);
+                _scale = Math.Clamp(1.0f / scaleTiles, 0.005f, 0.12f);
+                _needsRegen = true;
+            }
+            if (scalePlus)
+            {
+                scaleTiles = Math.Min(200f, scaleTiles + 5f);
+                _scale = Math.Clamp(1.0f / scaleTiles, 0.005f, 0.12f);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // Hauteur Max
+            Raylib.DrawTextEx(font, "Hauteur maximale", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{_maxHeight:F0} blocs (maxHeight {_maxHeight:F1})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawFloatInput("max-height", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref _maxHeight, 5f, 40f, 0))
+            {
+                _needsRegen = true;
+            }
+            bool heightMinus, heightPlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out heightMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out heightPlus);
+            if (heightMinus)
+            {
+                _maxHeight = Math.Max(5f, _maxHeight - 1f);
+                _needsRegen = true;
+            }
+            if (heightPlus)
+            {
+                _maxHeight = Math.Min(40f, _maxHeight + 1f);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // Variations Relief (Persistance)
+            float roughnessPercent = _persistence * 100.0f;
+            Raylib.DrawTextEx(font, "Rugosité", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{roughnessPercent:F0}% (persistence {_persistence:F2})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawFloatInput("roughness", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref roughnessPercent, 10f, 80f, 0))
+            {
+                _persistence = Math.Clamp(roughnessPercent / 100.0f, 0.10f, 0.80f);
+                _needsRegen = true;
+            }
+            bool persistenceMinus, persistencePlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out persistenceMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out persistencePlus);
+            if (persistenceMinus)
+            {
+                _persistence = Math.Max(0.10f, _persistence - 0.05f);
+                _needsRegen = true;
+            }
+            if (persistencePlus)
+            {
+                _persistence = Math.Min(0.80f, _persistence + 0.05f);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // ==========================================
+            // GROUP 4: CLIMAT
+            // ==========================================
+            DrawGroupHeader("4. Climat", ref rowY);
+
+            // Niveau d'eau
+            float waterPercent = _waterLevel * 100.0f;
+            Raylib.DrawTextEx(font, "Niveau d'eau", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{waterPercent:F0}% (waterLevel {_waterLevel:F2})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawFloatInput("water-level", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref waterPercent, 5f, 50f, 0))
+            {
+                _waterLevel = Math.Clamp(waterPercent / 100.0f, 0.05f, 0.50f);
+                _needsRegen = true;
+            }
+            bool waterMinus, waterPlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out waterMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out waterPlus);
+            if (waterMinus)
+            {
+                _waterLevel = Math.Max(0.05f, _waterLevel - 0.02f);
+                _needsRegen = true;
+            }
+            if (waterPlus)
+            {
+                _waterLevel = Math.Min(0.5f, _waterLevel + 0.02f);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // Humidité
+            float moistureValue = _moistureShift * 100.0f;
+            float humidityEquivalent = Math.Clamp(50.0f + moistureValue, 0.0f, 100.0f);
+            Raylib.DrawTextEx(font, "Humidité", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{moistureValue:+0;-0;0} / {humidityEquivalent:F0}% (shift {_moistureShift:+0.00;-0.00;0.00})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawFloatInput("moisture", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref moistureValue, -50f, 50f, 0))
+            {
+                _moistureShift = Math.Clamp(moistureValue / 100.0f, -0.50f, 0.50f);
+                _needsRegen = true;
+            }
+            bool moistMinus, moistPlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out moistMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out moistPlus);
+            if (moistMinus)
+            {
+                _moistureShift = Math.Max(-0.5f, _moistureShift - 0.05f);
+                _needsRegen = true;
+            }
+            if (moistPlus)
+            {
+                _moistureShift = Math.Min(0.5f, _moistureShift + 0.05f);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // Température
+            string tempText = _temperatureCelsius > 0 ? $"+{_temperatureCelsius}°C" : $"{_temperatureCelsius}°C";
+            float tempShiftValue = (_temperatureCelsius - 15.0f) * 0.008f;
+            Raylib.DrawTextEx(font, "Température", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{tempText} (tempShift {tempShiftValue:+0.000;-0.000;0.000})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawIntInput("temperature", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref _temperatureCelsius, -50, 70))
+            {
+                _needsRegen = true;
+            }
+            bool tempMinus, tempPlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out tempMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out tempPlus);
+            if (tempMinus)
+            {
+                _temperatureCelsius = Math.Max(-50, _temperatureCelsius - 10);
+                _needsRegen = true;
+            }
+            if (tempPlus)
+            {
+                _temperatureCelsius = Math.Min(70, _temperatureCelsius + 10);
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
+            // ==========================================
+            // GROUP 5: SIMULATION ET HABITANTS
+            // ==========================================
+            DrawGroupHeader("5. Simulation et habitants", ref rowY);
+
+            // Habitants
+            Raylib.DrawTextEx(font, "Habitants", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"{_humanCount} personnages (humanCount {_humanCount})", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            if (DrawIntInput("humans", new Rectangle(inputX, rowY + 31 - scroll, inputWidth, 30), font, ref _humanCount, 0, 200))
+            {
+                SyncHumanCount();
+            }
+            bool humansMinus, humansPlus;
+            DrawButton("-", new Rectangle(minusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out humansMinus);
+            DrawButton("+", new Rectangle(plusX, rowY + 31 - scroll, 36, 30), btnNormal, btnHover, font, out humansPlus);
+            if (humansMinus)
+            {
+                _humanCount = Math.Max(0, _humanCount - 1);
+                SyncHumanCount();
+            }
+            if (humansPlus)
+            {
+                _humanCount = Math.Min(200, _humanCount + 1);
+                SyncHumanCount();
+            }
+            rowY += rowStep;
+
+            // ==========================================
+            // GROUP 6: AFFICHAGE ET CAMERA
+            // ==========================================
+            DrawGroupHeader("6. Affichage et camera", ref rowY);
+
+            // Grille 3D
+            Raylib.DrawTextEx(font, "Grille 3D", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            string gridText = _showGrid3D ? "Activee" : "Desactivee";
+            Raylib.DrawTextEx(font, gridText, new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickGridOn, clickGridOff;
+            DrawButton("Oui", new Rectangle(inputX, rowY + 31 - scroll, 78, 30), _showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOn);
+            DrawButton("Non", new Rectangle(inputX + 86, rowY + 31 - scroll, 78, 30), !_showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOff);
+            if (clickGridOn) _showGrid3D = true;
+            if (clickGridOff) _showGrid3D = false;
+            rowY += rowStep;
+
+            // Caméra
+            Raylib.DrawTextEx(font, "Caméra", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "Recentrer la vue orbitale", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickResetCam;
+            DrawButton("Réinitialiser [R]", new Rectangle(inputX, rowY + 31 - scroll, 190, 30), new Color((byte)45, (byte)55, (byte)75, (byte)255), new Color((byte)80, (byte)95, (byte)125, (byte)255), font, out clickResetCam);
+            if (clickResetCam)
+            {
+                ResetCamera();
+            }
+            rowY += rowStep;
+
+            // Masquage interface
+            Raylib.DrawTextEx(font, "Interface", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "Masquer le panneau de contrôle", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickHide2;
+            DrawButton("Masquer [H]", new Rectangle(inputX, rowY + 31 - scroll, 190, 30), btnNormal, new Color((byte)180, (byte)50, (byte)50, (byte)255), font, out clickHide2);
+            if (clickHide2)
+            {
+                _showMenu = false;
+            }
+            rowY += rowStep;
+
+            // Performances / FPS
+            Raylib.DrawTextEx(font, "Performances", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, $"FPS: {Raylib.GetFPS()}", new Vector2(rowX, rowY + 22 - scroll), 14f, 1.0f, Color.Lime);
+            rowY += rowStep;
+
+            // ==========================================
+            // GROUP 7: RACCOURCIS & AIDE
+            // ==========================================
+            DrawGroupHeader("7. Raccourcis & aide", ref rowY);
+
+            Raylib.DrawTextEx(font, "Souris", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "Clic gauche/droit glissé : rotation", new Vector2(rowX, rowY + 20 - scroll), 12f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "Molette : zoom", new Vector2(rowX, rowY + 39 - scroll), 12f, 1.0f, Color.LightGray);
+            rowY += 66f;
+
+            Raylib.DrawTextEx(font, "Clavier", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "ZQSD / WASD / flèches : déplacer", new Vector2(rowX, rowY + 20 - scroll), 12f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "R : réinitialiser la caméra", new Vector2(rowX, rowY + 39 - scroll), 12f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "H ou Tab : masquer le menu", new Vector2(rowX, rowY + 58 - scroll), 12f, 1.0f, Color.LightGray);
+            Raylib.DrawTextEx(font, "Espace : nouvelle graine", new Vector2(rowX, rowY + 77 - scroll), 12f, 1.0f, Color.LightGray);
+            rowY += 105f;
+
+            Raylib.EndScissorMode();
 
             // ==========================================
             // PANNEAU LATÉRAL DROIT (Biomes - 9 Biomes) (Adaptatif)
