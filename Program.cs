@@ -39,7 +39,7 @@ namespace IslandWorldGenerator
         private static bool _needsRegen = true;
         private static bool _showMenu = true;
         private static bool _showGrid3D = false;
-        private static bool _enableColorGradient = true;
+        private static bool _enableColorGradient = false;
 
         private static float _scrollOffset = 0.0f;
         private static bool _isDraggingScrollbar = false;
@@ -996,6 +996,25 @@ namespace IslandWorldGenerator
             }
             rowY += rowStep;
 
+            // Dégradé de couleurs
+            Raylib.DrawTextEx(font, "Dégradé de couleurs", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            string gradText = _enableColorGradient ? "Active" : "Desactive";
+            Raylib.DrawTextEx(font, gradText, new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickGradOn, clickGradOff;
+            DrawButton("Oui", new Rectangle(inputX, rowY + 31 - scroll, 78, 30), _enableColorGradient ? btnActive : btnNormal, btnHover, font, out clickGradOn);
+            DrawButton("Non", new Rectangle(inputX + 86, rowY + 31 - scroll, 78, 30), !_enableColorGradient ? btnActive : btnNormal, btnHover, font, out clickGradOff);
+            if (clickGradOn && !_enableColorGradient)
+            {
+                _enableColorGradient = true;
+                _needsRegen = true;
+            }
+            if (clickGradOff && _enableColorGradient)
+            {
+                _enableColorGradient = false;
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
             // ==========================================
             // GROUP 3: RELIEFS
             // ==========================================
@@ -1192,25 +1211,6 @@ namespace IslandWorldGenerator
             DrawButton("Non", new Rectangle(inputX + 86, rowY + 31 - scroll, 78, 30), !_showGrid3D ? btnActive : btnNormal, btnHover, font, out clickGridOff);
             if (clickGridOn) _showGrid3D = true;
             if (clickGridOff) _showGrid3D = false;
-            rowY += rowStep;
-
-            // Dégradé de couleurs
-            Raylib.DrawTextEx(font, "Dégradé de couleurs", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
-            string gradText = _enableColorGradient ? "Active" : "Desactive";
-            Raylib.DrawTextEx(font, gradText, new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
-            bool clickGradOn, clickGradOff;
-            DrawButton("Oui", new Rectangle(inputX, rowY + 31 - scroll, 78, 30), _enableColorGradient ? btnActive : btnNormal, btnHover, font, out clickGradOn);
-            DrawButton("Non", new Rectangle(inputX + 86, rowY + 31 - scroll, 78, 30), !_enableColorGradient ? btnActive : btnNormal, btnHover, font, out clickGradOff);
-            if (clickGradOn && !_enableColorGradient)
-            {
-                _enableColorGradient = true;
-                _needsRegen = true;
-            }
-            if (clickGradOff && _enableColorGradient)
-            {
-                _enableColorGradient = false;
-                _needsRegen = true;
-            }
             rowY += rowStep;
 
             // Caméra
