@@ -39,6 +39,7 @@ namespace IslandWorldGenerator
         private static bool _needsRegen = true;
         private static bool _showMenu = true;
         private static bool _showGrid3D = false;
+        private static bool _enableColorGradient = true;
 
         private static float _scrollOffset = 0.0f;
         private static bool _isDraggingScrollbar = false;
@@ -59,7 +60,7 @@ namespace IslandWorldGenerator
 
         private readonly struct TerrainTriangle
         {
-            public TerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color color)
+            public TerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color colorA, Color colorB, Color colorC)
             {
                 A = a;
                 B = b;
@@ -67,7 +68,9 @@ namespace IslandWorldGenerator
                 NormalA = nA;
                 NormalB = nB;
                 NormalC = nC;
-                Color = color;
+                ColorA = colorA;
+                ColorB = colorB;
+                ColorC = colorC;
             }
 
             public readonly Vector3 A;
@@ -76,7 +79,9 @@ namespace IslandWorldGenerator
             public readonly Vector3 NormalA;
             public readonly Vector3 NormalB;
             public readonly Vector3 NormalC;
-            public readonly Color Color;
+            public readonly Color ColorA;
+            public readonly Color ColorB;
+            public readonly Color ColorC;
         }
 
         private class IslandHuman
@@ -789,7 +794,7 @@ namespace IslandWorldGenerator
             Raylib.DrawLine(33, 51, 347, 51, new Color((byte)255, (byte)255, (byte)255, (byte)35));
 
             float viewportHeight = currentScreenHeight - 90;
-            float totalContentHeight = 1470f;
+            float totalContentHeight = 1540f;
             float maxScroll = Math.Max(0.0f, totalContentHeight - viewportHeight);
 
             float trackY = 65f;
@@ -1189,6 +1194,25 @@ namespace IslandWorldGenerator
             if (clickGridOff) _showGrid3D = false;
             rowY += rowStep;
 
+            // Dégradé de couleurs
+            Raylib.DrawTextEx(font, "Dégradé de couleurs", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
+            string gradText = _enableColorGradient ? "Active" : "Desactive";
+            Raylib.DrawTextEx(font, gradText, new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+            bool clickGradOn, clickGradOff;
+            DrawButton("Oui", new Rectangle(inputX, rowY + 31 - scroll, 78, 30), _enableColorGradient ? btnActive : btnNormal, btnHover, font, out clickGradOn);
+            DrawButton("Non", new Rectangle(inputX + 86, rowY + 31 - scroll, 78, 30), !_enableColorGradient ? btnActive : btnNormal, btnHover, font, out clickGradOff);
+            if (clickGradOn && !_enableColorGradient)
+            {
+                _enableColorGradient = true;
+                _needsRegen = true;
+            }
+            if (clickGradOff && _enableColorGradient)
+            {
+                _enableColorGradient = false;
+                _needsRegen = true;
+            }
+            rowY += rowStep;
+
             // Caméra
             Raylib.DrawTextEx(font, "Caméra", new Vector2(rowX, rowY - scroll), 13f, 1.0f, Color.LightGray);
             Raylib.DrawTextEx(font, "Recentrer la vue orbitale", new Vector2(rowX, rowY + 16 - scroll), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
@@ -1321,7 +1345,10 @@ namespace IslandWorldGenerator
             {
                 for (int z = startZ; z < startZ + chunkLength; z++)
                 {
-                    Color color = grid[x, z].Color;
+                    Color colorTL = grid[x, z].Color;
+                    Color colorTR = _enableColorGradient ? grid[x + 1, z].Color : colorTL;
+                    Color colorBL = _enableColorGradient ? grid[x, z + 1].Color : colorTL;
+                    Color colorBR = _enableColorGradient ? grid[x + 1, z + 1].Color : colorTL;
 
                     Vector3 topLeft = new Vector3(x * coordinateScale, grid[x, z].Height, z * coordinateScale);
                     Vector3 topRight = new Vector3((x + 1) * coordinateScale, grid[x + 1, z].Height, z * coordinateScale);
@@ -1334,10 +1361,10 @@ namespace IslandWorldGenerator
                     Vector3 nBR = GetSmoothNormal(grid, x + 1, z + 1, gridWidth, gridLength, coordinateScale);
 
                     ushort baseIndex = (ushort)vertexIndex;
-                    WriteTerrainVertex(mesh, vertexIndex++, topLeft, nTL, color);
-                    WriteTerrainVertex(mesh, vertexIndex++, bottomLeft, nBL, color);
-                    WriteTerrainVertex(mesh, vertexIndex++, topRight, nTR, color);
-                    WriteTerrainVertex(mesh, vertexIndex++, bottomRight, nBR, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, topLeft, nTL, colorTL);
+                    WriteTerrainVertex(mesh, vertexIndex++, bottomLeft, nBL, colorBL);
+                    WriteTerrainVertex(mesh, vertexIndex++, topRight, nTR, colorTR);
+                    WriteTerrainVertex(mesh, vertexIndex++, bottomRight, nBR, colorBR);
 
                     mesh.Indices[indexIndex++] = baseIndex;
                     mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
@@ -1398,9 +1425,9 @@ namespace IslandWorldGenerator
             {
                 ushort baseIndex = (ushort)vertexIndex;
 
-                WriteTerrainVertex(mesh, vertexIndex++, triangle.A, triangle.NormalA, triangle.Color);
-                WriteTerrainVertex(mesh, vertexIndex++, triangle.B, triangle.NormalB, triangle.Color);
-                WriteTerrainVertex(mesh, vertexIndex++, triangle.C, triangle.NormalC, triangle.Color);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.A, triangle.NormalA, triangle.ColorA);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.B, triangle.NormalB, triangle.ColorB);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.C, triangle.NormalC, triangle.ColorC);
 
                 mesh.Indices[indexIndex++] = baseIndex;
                 mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
@@ -1453,6 +1480,54 @@ namespace IslandWorldGenerator
             Color colorBL = bottomLeftBlock.Color;
             Color colorBR = bottomRightBlock.Color;
 
+            Color cTL = colorTL;
+            Color cTR = colorTR;
+            Color cBL = colorBL;
+            Color cBR = colorBR;
+            Color cMT = BlendColors(colorTL, colorTR, 0.5f);
+            Color cMR = BlendColors(colorTR, colorBR, 0.5f);
+            Color cMB = BlendColors(colorBL, colorBR, 0.5f);
+            Color cML = BlendColors(colorTL, colorBL, 0.5f);
+            Color cCenter = BlendColors(BlendColors(colorTL, colorTR, 0.5f), BlendColors(colorBL, colorBR, 0.5f), 0.5f);
+
+            Color GetVertexColor(Vector3 pos)
+            {
+                float dx = pos.X;
+                float dz = pos.Z;
+                float tlX = TL.X;
+                float tlZ = TL.Z;
+                float trX = TR.X;
+                float blZ = BL.Z;
+
+                float rx = (dx - tlX) / (trX - tlX);
+                float rz = (dz - tlZ) / (blZ - tlZ);
+
+                float cellX = Math.Clamp((float)Math.Round(rx * 2.0f) * 0.5f, 0.0f, 1.0f);
+                float cellZ = Math.Clamp((float)Math.Round(rz * 2.0f) * 0.5f, 0.0f, 1.0f);
+
+                if (cellX == 0.0f && cellZ == 0.0f) return cTL;
+                if (cellX == 1.0f && cellZ == 0.0f) return cTR;
+                if (cellX == 0.0f && cellZ == 1.0f) return cBL;
+                if (cellX == 1.0f && cellZ == 1.0f) return cBR;
+                if (cellX == 0.5f && cellZ == 0.0f) return cMT;
+                if (cellX == 1.0f && cellZ == 0.5f) return cMR;
+                if (cellX == 0.5f && cellZ == 1.0f) return cMB;
+                if (cellX == 0.0f && cellZ == 0.5f) return cML;
+                return cCenter;
+            }
+
+            void AddMS_Triangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color flatColor)
+            {
+                if (_enableColorGradient)
+                {
+                    AddTerrainTriangle(a, b, c, nA, nB, nC, GetVertexColor(a), GetVertexColor(b), GetVertexColor(c), triangles);
+                }
+                else
+                {
+                    AddTerrainTriangle(a, b, c, nA, nB, nC, flatColor, flatColor, flatColor, triangles);
+                }
+            }
+
             BiomeType bTL = topLeftBlock.Biome;
             BiomeType bTR = topRightBlock.Biome;
             BiomeType bBL = bottomLeftBlock.Biome;
@@ -1469,8 +1544,8 @@ namespace IslandWorldGenerator
 
             if (uniqueBiomesCount == 1)
             {
-                AddTerrainTriangle(TL, TR, BL, nTL, nTR, nBL, colorTL, triangles);
-                AddTerrainTriangle(TR, BR, BL, nTR, nBR, nBL, colorTL, triangles);
+                AddMS_Triangle(TL, TR, BL, nTL, nTR, nBL, colorTL);
+                AddMS_Triangle(TR, BR, BL, nTR, nBR, nBL, colorTL);
             }
             else if (uniqueBiomesCount == 2)
             {
@@ -1489,72 +1564,72 @@ namespace IslandWorldGenerator
 
                     if (bTL == minorityBiome)
                     {
-                        AddTerrainTriangle(TL, MT, ML, nTL, nMT, nML, minorityColor, triangles);
-                        AddTerrainTriangle(TR, BR, BL, nTR, nBR, nBL, majorityColor, triangles);
-                        AddTerrainTriangle(TR, BL, ML, nTR, nBL, nML, majorityColor, triangles);
-                        AddTerrainTriangle(TR, ML, MT, nTR, nML, nMT, majorityColor, triangles);
+                        AddMS_Triangle(TL, MT, ML, nTL, nMT, nML, minorityColor);
+                        AddMS_Triangle(TR, BR, BL, nTR, nBR, nBL, majorityColor);
+                        AddMS_Triangle(TR, BL, ML, nTR, nBL, nML, majorityColor);
+                        AddMS_Triangle(TR, ML, MT, nTR, nML, nMT, majorityColor);
                     }
                     else if (bTR == minorityBiome)
                     {
-                        AddTerrainTriangle(TR, MR, MT, nTR, nMR, nMT, minorityColor, triangles);
-                        AddTerrainTriangle(TL, BR, BL, nTL, nBR, nBL, majorityColor, triangles);
-                        AddTerrainTriangle(TL, MR, BR, nTL, nMR, nBR, majorityColor, triangles);
-                        AddTerrainTriangle(TL, MT, MR, nTL, nMT, nMR, majorityColor, triangles);
+                        AddMS_Triangle(TR, MR, MT, nTR, nMR, nMT, minorityColor);
+                        AddMS_Triangle(TL, BR, BL, nTL, nBR, nBL, majorityColor);
+                        AddMS_Triangle(TL, MR, BR, nTL, nMR, nBR, majorityColor);
+                        AddMS_Triangle(TL, MT, MR, nTL, nMT, nMR, majorityColor);
                     }
                     else if (bBL == minorityBiome)
                     {
-                        AddTerrainTriangle(BL, ML, MB, nBL, nML, nMB, minorityColor, triangles);
-                        AddTerrainTriangle(TL, TR, BR, nTL, nTR, nBR, majorityColor, triangles);
-                        AddTerrainTriangle(TL, BR, MB, nTL, nBR, nMB, majorityColor, triangles);
-                        AddTerrainTriangle(TL, MB, ML, nTL, nMB, nML, majorityColor, triangles);
+                        AddMS_Triangle(BL, ML, MB, nBL, nML, nMB, minorityColor);
+                        AddMS_Triangle(TL, TR, BR, nTL, nTR, nBR, majorityColor);
+                        AddMS_Triangle(TL, BR, MB, nTL, nBR, nMB, majorityColor);
+                        AddMS_Triangle(TL, MB, ML, nTL, nMB, nML, majorityColor);
                     }
                     else
                     {
-                        AddTerrainTriangle(BR, MB, MR, nBR, nMB, nMR, minorityColor, triangles);
-                        AddTerrainTriangle(TL, TR, MR, nTL, nTR, nMR, majorityColor, triangles);
-                        AddTerrainTriangle(TL, MR, BL, nTL, nMR, nBL, majorityColor, triangles);
-                        AddTerrainTriangle(BL, MR, MB, nBL, nMR, nMB, majorityColor, triangles);
+                        AddMS_Triangle(BR, MB, MR, nBR, nMB, nMR, minorityColor);
+                        AddMS_Triangle(TL, TR, MR, nTL, nTR, nMR, majorityColor);
+                        AddMS_Triangle(TL, MR, BL, nTL, nMR, nBL, majorityColor);
+                        AddMS_Triangle(BL, MR, MB, nBL, nMR, nMB, majorityColor);
                     }
                 }
                 else
                 {
                     if (bTL == bTR && bBL == bBR)
                     {
-                        AddTerrainTriangle(TL, TR, ML, nTL, nTR, nML, colorTL, triangles);
-                        AddTerrainTriangle(TR, MR, ML, nTR, nMR, nML, colorTL, triangles);
-                        AddTerrainTriangle(BL, BR, ML, nBL, nBR, nML, colorBL, triangles);
-                        AddTerrainTriangle(BR, MR, ML, nBR, nMR, nML, colorBL, triangles);
+                        AddMS_Triangle(TL, TR, ML, nTL, nTR, nML, colorTL);
+                        AddMS_Triangle(TR, MR, ML, nTR, nMR, nML, colorTL);
+                        AddMS_Triangle(BL, BR, ML, nBL, nBR, nML, colorBL);
+                        AddMS_Triangle(BR, MR, ML, nBR, nMR, nML, colorBL);
                     }
                     else if (bTL == bBL && bTR == bBR)
                     {
-                        AddTerrainTriangle(TL, MT, BL, nTL, nMT, nBL, colorTL, triangles);
-                        AddTerrainTriangle(MT, MB, BL, nMT, nMB, nBL, colorTL, triangles);
-                        AddTerrainTriangle(TR, MT, BR, nTR, nMT, nBR, colorTR, triangles);
-                        AddTerrainTriangle(MT, MB, BR, nMT, nMB, nBR, colorTR, triangles);
+                        AddMS_Triangle(TL, MT, BL, nTL, nMT, nBL, colorTL);
+                        AddMS_Triangle(MT, MB, BL, nMT, nMB, nBL, colorTL);
+                        AddMS_Triangle(TR, MT, BR, nTR, nMT, nBR, colorTR);
+                        AddMS_Triangle(MT, MB, BR, nMT, nMB, nBR, colorTR);
                     }
                     else
                     {
-                        AddTerrainTriangle(TL, ML, center, nTL, nML, nCenter, colorTL, triangles);
-                        AddTerrainTriangle(ML, BL, center, nML, nBL, nCenter, colorBL, triangles);
-                        AddTerrainTriangle(BL, MB, center, nBL, nMB, nCenter, colorBL, triangles);
-                        AddTerrainTriangle(MB, BR, center, nMB, nBR, nCenter, colorBR, triangles);
-                        AddTerrainTriangle(BR, MR, center, nBR, nMR, nCenter, colorBR, triangles);
-                        AddTerrainTriangle(MR, TR, center, nMR, nTR, nCenter, colorTR, triangles);
-                        AddTerrainTriangle(TR, MT, center, nTR, nMT, nCenter, colorTR, triangles);
-                        AddTerrainTriangle(MT, TL, center, nMT, nTL, nCenter, colorTL, triangles);
+                        AddMS_Triangle(TL, ML, center, nTL, nML, nCenter, colorTL);
+                        AddMS_Triangle(ML, BL, center, nML, nBL, nCenter, colorBL);
+                        AddMS_Triangle(BL, MB, center, nBL, nMB, nCenter, colorBL);
+                        AddMS_Triangle(MB, BR, center, nMB, nBR, nCenter, colorBR);
+                        AddMS_Triangle(BR, MR, center, nBR, nMR, nCenter, colorBR);
+                        AddMS_Triangle(MR, TR, center, nMR, nTR, nCenter, colorTR);
+                        AddMS_Triangle(TR, MT, center, nTR, nMT, nCenter, colorTR);
+                        AddMS_Triangle(MT, TL, center, nMT, nTL, nCenter, colorTL);
                     }
                 }
             }
             else
             {
-                AddTerrainTriangle(TL, ML, center, nTL, nML, nCenter, colorTL, triangles);
-                AddTerrainTriangle(ML, BL, center, nML, nBL, nCenter, colorBL, triangles);
-                AddTerrainTriangle(BL, MB, center, nBL, nMB, nCenter, colorBL, triangles);
-                AddTerrainTriangle(MB, BR, center, nMB, nBR, nCenter, colorBR, triangles);
-                AddTerrainTriangle(BR, MR, center, nBR, nMR, nCenter, colorBR, triangles);
-                AddTerrainTriangle(MR, TR, center, nMR, nTR, nCenter, colorTR, triangles);
-                AddTerrainTriangle(TR, MT, center, nTR, nMT, nCenter, colorTR, triangles);
-                AddTerrainTriangle(MT, TL, center, nMT, nTL, nCenter, colorTL, triangles);
+                AddMS_Triangle(TL, ML, center, nTL, nML, nCenter, colorTL);
+                AddMS_Triangle(ML, BL, center, nML, nBL, nCenter, colorBL);
+                AddMS_Triangle(BL, MB, center, nBL, nMB, nCenter, colorBL);
+                AddMS_Triangle(MB, BR, center, nMB, nBR, nCenter, colorBR);
+                AddMS_Triangle(BR, MR, center, nBR, nMR, nCenter, colorBR);
+                AddMS_Triangle(MR, TR, center, nMR, nTR, nCenter, colorTR);
+                AddMS_Triangle(TR, MT, center, nTR, nMT, nCenter, colorTR);
+                AddMS_Triangle(MT, TL, center, nMT, nTL, nCenter, colorTL);
             }
         }
 
@@ -1562,7 +1637,7 @@ namespace IslandWorldGenerator
          * Ajoute un triangle terrestre a la liste de rendu du terrain. Verifie et corrige
          * l'ordre d'enroulement pour que la normale pointe vers le ciel.
          */
-        private static void AddTerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color color, List<TerrainTriangle> triangles)
+        private static void AddTerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 nA, Vector3 nB, Vector3 nC, Color colorA, Color colorB, Color colorC, List<TerrainTriangle> triangles)
         {
             Vector3 normal = Vector3.Cross(b - a, c - a);
             if (normal.LengthSquared() < 0.000001f)
@@ -1579,9 +1654,13 @@ namespace IslandWorldGenerator
                 Vector3 tempN = nB;
                 nB = nC;
                 nC = tempN;
+
+                Color tempColor = colorB;
+                colorB = colorC;
+                colorC = tempColor;
             }
 
-            triangles.Add(new TerrainTriangle(a, b, c, nA, nB, nC, color));
+            triangles.Add(new TerrainTriangle(a, b, c, nA, nB, nC, colorA, colorB, colorC));
         }
 
         /*
@@ -1597,6 +1676,18 @@ namespace IslandWorldGenerator
 
             Vector3 normal = new Vector3(hLeft - hRight, 2.0f * coordinateScale, hTop - hBottom);
             return Vector3.Normalize(normal);
+        }
+
+        /*
+         * Effectue un melange lineaire (Lerp) entre deux couleurs.
+         */
+        private static Color BlendColors(Color c1, Color c2, float amount)
+        {
+            byte r = (byte)(c1.R + (c2.R - c1.R) * amount);
+            byte g = (byte)(c1.G + (c2.G - c1.G) * amount);
+            byte b = (byte)(c1.B + (c2.B - c1.B) * amount);
+            byte a = (byte)(c1.A + (c2.A - c1.A) * amount);
+            return new Color(r, g, b, a);
         }
 
         private static Vector3 GetBlockPosition(WorldBlock block, float coordinateScale)
