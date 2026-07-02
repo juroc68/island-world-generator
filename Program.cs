@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Numerics;
@@ -25,6 +26,9 @@ namespace IslandWorldGenerator
         private static float _lacunarity = 2.0f;
         private static float _maxHeight = 20f;
         private static float _waterLevel = 0.25f;
+        private static int _humanCount = 12;
+        private static int _biomeEdgePrecision = 2;
+        private static BiomeBoundaryMode _biomeBoundaryMode = BiomeBoundaryMode.SharpTiles;
         
         // Contrôles de répartition des biomes et de surface de l'île
         private static float _moistureShift = 0.0f;      // Ajustement global de l'humidité
@@ -42,6 +46,54 @@ namespace IslandWorldGenerator
 
         private static Model _terrainModel;
         private static bool _hasModel = false;
+        private static readonly List<IslandHuman> _humans = new List<IslandHuman>();
+        private static Random _humanRandom = new Random(_seed + 9001);
+
+        private enum BiomeBoundaryMode
+        {
+            SharpTiles,
+            MarchingSquares
+        }
+
+        private readonly struct TerrainTriangle
+        {
+            public TerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Color color)
+            {
+                A = a;
+                B = b;
+                C = c;
+                Color = color;
+            }
+
+            public readonly Vector3 A;
+            public readonly Vector3 B;
+            public readonly Vector3 C;
+            public readonly Color Color;
+        }
+
+        private class IslandHuman
+        {
+            public string Name = "";
+            public Vector2 Position;
+            public Vector2 Direction;
+            public float Speed;
+            public float WanderTimer;
+            public float JumpTimer;
+            public float JumpDuration;
+            public float NextJumpDelay;
+            public Color BodyColor;
+        }
+
+        private static readonly string[] FrenchFirstNames =
+        {
+            "Jean", "Pierre", "Louis", "Henri", "Marcel", "Lucien", "Gaston", "Armand",
+            "Jules", "Emile", "Paul", "Andre", "Bernard", "Claude", "Michel", "Alain",
+            "Rene", "Robert", "Georges", "Jacques", "Maurice", "Roger", "Yves", "Etienne",
+            "Baptiste", "Antoine", "Francois", "Nicolas", "Marin", "Basile", "Leon", "Gustave",
+            "Marie", "Jeanne", "Louise", "Alice", "Madeleine", "Suzanne", "Simone", "Lucie",
+            "Marguerite", "Juliette", "Camille", "Claire", "Sophie", "Helene", "Anne", "Celine",
+            "Adele", "Manon", "Charlotte", "Pauline", "Gabrielle", "Colette", "Nadine", "Elise"
+        };
 
         // Variables pour la caméra orbitale personnalisée
         private static float _cameraRotationAngle = 0.0f;     // Rotation horizontale (degrés)
@@ -122,6 +174,8 @@ namespace IslandWorldGenerator
                             biomeCounts[(int)_worldGrid[x, z].Biome]++;
                         }
                     }
+
+                    RegenerateHumans();
                 }
 
                 // Touche d'action rapide pour une nouvelle graine
@@ -145,6 +199,7 @@ namespace IslandWorldGenerator
 
                 // Mise à jour de la caméra orbitale
                 UpdateOrbitCamera(ref camera);
+                UpdateHumans(Raylib.GetFrameTime());
 
                 // ---- LOGIQUE DE RENDU ----
 
@@ -228,7 +283,10 @@ namespace IslandWorldGenerator
                     }
                 }
 
-                // 4. Dessiner la bordure bleue de la carte à la surface de l'eau
+                // 4. Dessiner les habitants
+                DrawHumans();
+
+                // 5. Dessiner la bordure bleue de la carte à la surface de l'eau
                 float borderY = waterHeight + 0.05f;
                 Color borderColor = new Color((byte)0, (byte)150, (byte)255, (byte)100);
                 Raylib.DrawLine3D(new Vector3(0, borderY, 0), new Vector3(_mapWidth, borderY, 0), borderColor);
@@ -237,6 +295,8 @@ namespace IslandWorldGenerator
                 Raylib.DrawLine3D(new Vector3(0, borderY, _mapLength), new Vector3(0, borderY, 0), borderColor);
 
                 Raylib.EndMode3D();
+
+                DrawHumanNames(camera, font);
 
                 // Rendu de l'interface graphique (HUD / Menu)
                 DrawInterface(biomeCounts, font, random);
@@ -251,6 +311,214 @@ namespace IslandWorldGenerator
                 Raylib.UnloadModel(_terrainModel);
             }
             Raylib.CloseWindow();
+        }
+
+        private static void RegenerateHumans()
+        {
+            _humans.Clear();
+            _humanRandom = new Random(_seed + 9001);
+
+            for (int i = 0; i < _humanCount; i++)
+            {
+                if (TryFindHumanSpawn(out Vector2 spawn))
+                {
+                    _humans.Add(CreateHuman(spawn));
+                }
+            }
+        }
+
+        private static void SyncHumanCount()
+        {
+            while (_humans.Count > _humanCount)
+            {
+                _humans.RemoveAt(_humans.Count - 1);
+            }
+
+            while (_humans.Count < _humanCount)
+            {
+                if (!TryFindHumanSpawn(out Vector2 spawn))
+                {
+                    break;
+                }
+
+                _humans.Add(CreateHuman(spawn));
+            }
+        }
+
+        private static IslandHuman CreateHuman(Vector2 position)
+        {
+            return new IslandHuman
+            {
+                Name = GenerateHumanName(),
+                Position = position,
+                Direction = RandomDirection(),
+                Speed = 0.8f + (float)_humanRandom.NextDouble() * 0.8f,
+                WanderTimer = 0.4f + (float)_humanRandom.NextDouble() * 2.5f,
+                JumpTimer = 0.0f,
+                JumpDuration = 0.35f,
+                NextJumpDelay = 0.8f + (float)_humanRandom.NextDouble() * 2.8f,
+                BodyColor = new Color((byte)225, (byte)175, (byte)130, (byte)255)
+            };
+        }
+
+        private static bool TryFindHumanSpawn(out Vector2 spawn)
+        {
+            for (int attempt = 0; attempt < 1200; attempt++)
+            {
+                int x = _humanRandom.Next(1, Math.Max(2, _mapWidth - 1));
+                int z = _humanRandom.Next(1, Math.Max(2, _mapLength - 1));
+
+                if (IsHumanWalkable(x, z))
+                {
+                    spawn = new Vector2(x + 0.5f, z + 0.5f);
+                    return true;
+                }
+            }
+
+            spawn = Vector2.Zero;
+            return false;
+        }
+
+        private static void UpdateHumans(float deltaTime)
+        {
+            if (_worldGrid.Length == 0 || _humans.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var human in _humans)
+            {
+                human.WanderTimer -= deltaTime;
+                human.NextJumpDelay -= deltaTime;
+
+                if (human.WanderTimer <= 0.0f)
+                {
+                    human.Direction = RandomDirection();
+                    human.WanderTimer = 0.6f + (float)_humanRandom.NextDouble() * 2.4f;
+                }
+
+                if (human.JumpTimer <= 0.0f && human.NextJumpDelay <= 0.0f)
+                {
+                    human.JumpTimer = human.JumpDuration;
+                    human.NextJumpDelay = 0.8f + (float)_humanRandom.NextDouble() * 3.2f;
+                }
+
+                if (human.JumpTimer > 0.0f)
+                {
+                    human.JumpTimer = Math.Max(0.0f, human.JumpTimer - deltaTime);
+                }
+
+                Vector2 nextPosition = human.Position + human.Direction * human.Speed * deltaTime;
+                int nextX = (int)MathF.Round(nextPosition.X);
+                int nextZ = (int)MathF.Round(nextPosition.Y);
+
+                if (IsHumanWalkable(nextX, nextZ))
+                {
+                    human.Position = nextPosition;
+                }
+                else
+                {
+                    human.Direction = RandomDirection();
+                    human.WanderTimer = 0.4f + (float)_humanRandom.NextDouble() * 1.2f;
+                }
+            }
+        }
+
+        private static void DrawHumans()
+        {
+            if (_worldGrid.Length == 0)
+            {
+                return;
+            }
+
+            foreach (var human in _humans)
+            {
+                float terrainHeight = GetTerrainHeightAt(human.Position);
+                float jumpProgress = human.JumpTimer > 0.0f ? 1.0f - human.JumpTimer / human.JumpDuration : 0.0f;
+                float jumpOffset = human.JumpTimer > 0.0f ? MathF.Sin(jumpProgress * MathF.PI) * 0.45f : 0.0f;
+                float baseY = terrainHeight + jumpOffset;
+
+                float bodyRadius = 0.23f;
+                Vector3 bodyBase = new Vector3(human.Position.X, baseY + 0.32f, human.Position.Y);
+                Vector3 bodyTop = new Vector3(human.Position.X, baseY + 0.88f, human.Position.Y);
+                Vector3 head = new Vector3(human.Position.X, baseY + 1.18f, human.Position.Y);
+                Vector3 spearCenter = new Vector3(human.Position.X + 0.34f, baseY + 0.88f, human.Position.Y);
+
+                Color skin = human.BodyColor;
+                Color wood = new Color((byte)120, (byte)75, (byte)35, (byte)255);
+
+                Raylib.DrawCylinderEx(bodyBase, bodyTop, bodyRadius, bodyRadius, 12, human.BodyColor);
+                Raylib.DrawSphere(bodyBase, bodyRadius, human.BodyColor);
+                Raylib.DrawSphere(bodyTop, bodyRadius, human.BodyColor);
+                Raylib.DrawSphere(head, 0.22f, skin);
+                Raylib.DrawCube(spearCenter, 0.08f, 1.45f, 0.08f, wood);
+            }
+        }
+
+        private static void DrawHumanNames(Camera3D camera, Font font)
+        {
+            if (_worldGrid.Length == 0 || _humans.Count == 0)
+            {
+                return;
+            }
+
+            int screenWidth = Raylib.GetScreenWidth();
+            int screenHeight = Raylib.GetScreenHeight();
+
+            foreach (var human in _humans)
+            {
+                float terrainHeight = GetTerrainHeightAt(human.Position);
+                float jumpProgress = human.JumpTimer > 0.0f ? 1.0f - human.JumpTimer / human.JumpDuration : 0.0f;
+                float jumpOffset = human.JumpTimer > 0.0f ? MathF.Sin(jumpProgress * MathF.PI) * 0.45f : 0.0f;
+                Vector3 labelWorldPosition = new Vector3(human.Position.X, terrainHeight + jumpOffset + 1.55f, human.Position.Y);
+                Vector2 labelScreenPosition = Raylib.GetWorldToScreen(labelWorldPosition, camera);
+
+                if (labelScreenPosition.X < -80 || labelScreenPosition.X > screenWidth + 80 ||
+                    labelScreenPosition.Y < -30 || labelScreenPosition.Y > screenHeight + 30)
+                {
+                    continue;
+                }
+
+                float fontSize = 11f;
+                Vector2 textSize = Raylib.MeasureTextEx(font, human.Name, fontSize, 1.0f);
+                Vector2 textPosition = new Vector2(
+                    labelScreenPosition.X - textSize.X / 2.0f,
+                    labelScreenPosition.Y - textSize.Y / 2.0f
+                );
+
+                Raylib.DrawTextEx(font, human.Name, textPosition, fontSize, 1.0f, Color.White);
+            }
+        }
+
+        private static bool IsHumanWalkable(int x, int z)
+        {
+            if (x < 0 || z < 0 || x >= _mapWidth || z >= _mapLength || _worldGrid.Length == 0)
+            {
+                return false;
+            }
+
+            var block = _worldGrid[x, z];
+            return block.Height > _waterLevel * _maxHeight + 0.05f
+                && block.Biome != BiomeType.DeepOcean
+                && block.Biome != BiomeType.ShallowWater;
+        }
+
+        private static float GetTerrainHeightAt(Vector2 position)
+        {
+            int x = Math.Clamp((int)MathF.Round(position.X), 0, _mapWidth - 1);
+            int z = Math.Clamp((int)MathF.Round(position.Y), 0, _mapLength - 1);
+            return _worldGrid[x, z].Height;
+        }
+
+        private static Vector2 RandomDirection()
+        {
+            float angle = (float)_humanRandom.NextDouble() * MathF.PI * 2.0f;
+            return new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+        }
+
+        private static string GenerateHumanName()
+        {
+            return FrenchFirstNames[_humanRandom.Next(FrenchFirstNames.Length)];
         }
 
         private static void ResetCamera()
@@ -730,6 +998,28 @@ namespace IslandWorldGenerator
                     _mapWidth = 256; _mapLength = 256;
                     ResetCamera();
                     _needsRegen = true;
+                }
+                rowY += rowStep;
+
+                // Habitants
+                Raylib.DrawTextEx(font, "Habitants", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
+                Raylib.DrawTextEx(font, $"{_humanCount} personnages (humanCount {_humanCount})", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                if (DrawIntInput("humans", new Rectangle(inputX, rowY + 31, inputWidth, 30), font, ref _humanCount, 0, 200))
+                {
+                    SyncHumanCount();
+                }
+                bool humansMinus, humansPlus;
+                DrawButton("-", new Rectangle(minusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out humansMinus);
+                DrawButton("+", new Rectangle(plusX, rowY + 31, 36, 30), btnNormal, btnHover, font, out humansPlus);
+                if (humansMinus)
+                {
+                    _humanCount = Math.Max(0, _humanCount - 1);
+                    SyncHumanCount();
+                }
+                if (humansPlus)
+                {
+                    _humanCount = Math.Min(200, _humanCount + 1);
+                    SyncHumanCount();
                 }
                 rowY += rowStep;
 

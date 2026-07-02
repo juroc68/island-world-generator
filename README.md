@@ -13,6 +13,7 @@ Le projet permet d'explorer l'influence du relief, de l'eau, de l'humidité et d
 - Biomes calculés selon l'altitude, l'humidité et la température.
 - Végétation cohérente avec le climat.
 - Température extrême : à partir de 70°C, la végétation disparaît.
+- Habitants minimalistes placés sur l'île, avec prénoms français, déplacements et sauts aléatoires.
 - Menu vertical avec champs numériques éditables.
 - Statistiques de répartition des biomes.
 - Caméra orbitale avec déplacement relatif à l'orientation.
@@ -27,6 +28,7 @@ Le projet permet d'explorer l'influence du relief, de l'eau, de l'humidité et d
 - `Humidité` : règle le climat global, avec équivalent en pourcentage.
 - `Température` : influence désert, taïga, neige et végétation.
 - `Surface de l'île` : agrandit ou réduit la masse terrestre.
+- `Habitants` : choisit le nombre de petits personnages simulés sur l'île.
 
 ## Commandes
 
