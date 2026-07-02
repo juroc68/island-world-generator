@@ -44,7 +44,7 @@ namespace IslandWorldGenerator
         private static string? _activeNumberInput = null;
         private static string _numberInputText = "";
 
-        private static Model _terrainModel;
+        private static readonly List<Model> _terrainModels = new List<Model>();
         private static bool _hasModel = false;
         private static readonly List<IslandHuman> _humans = new List<IslandHuman>();
         private static Random _humanRandom = new Random(_seed + 9001);
@@ -147,7 +147,7 @@ namespace IslandWorldGenerator
                 {
                     if (_hasModel)
                     {
-                        Raylib.UnloadModel(_terrainModel);
+                        UnloadTerrainModels();
                         _hasModel = false;
                     }
 
@@ -160,8 +160,25 @@ namespace IslandWorldGenerator
                         _moistureShift, tempShift, _islandSize
                     );
                     _worldGrid = generator.GenerateWorld();
-                    
-                    _terrainModel = GenerateSmoothTerrainMesh(_worldGrid, _mapWidth, _mapLength);
+
+                    int visualWidth = (_mapWidth - 1) * _biomeEdgePrecision + 1;
+                    int visualLength = (_mapLength - 1) * _biomeEdgePrecision + 1;
+                    WorldGenerator visualGenerator = new WorldGenerator(
+                        visualWidth, visualLength, _seed, _scale / _biomeEdgePrecision, _octaves,
+                        _persistence, _lacunarity, _maxHeight, _waterLevel,
+                        _moistureShift, tempShift, _islandSize
+                    );
+                    WorldBlock[,] visualGrid = visualGenerator.GenerateWorld();
+
+                    if (_biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares)
+                    {
+                        _terrainModels.AddRange(GenerateMarchingSquaresBiomeTerrainMeshes(visualGrid, visualWidth, visualLength, 1.0f / _biomeEdgePrecision));
+                    }
+                    else
+                    {
+                        _terrainModels.AddRange(GenerateSharpBiomeTerrainMeshes(visualGrid, visualWidth, visualLength, 1.0f / _biomeEdgePrecision));
+                    }
+
                     _hasModel = true;
                     _needsRegen = false;
 
@@ -214,7 +231,10 @@ namespace IslandWorldGenerator
                 // 1. Dessiner le maillage de terrain de l'île
                 if (_hasModel)
                 {
-                    Raylib.DrawModel(_terrainModel, Vector3.Zero, 1.0f, Color.White);
+                    foreach (Model terrainModel in _terrainModels)
+                    {
+                        Raylib.DrawModel(terrainModel, Vector3.Zero, 1.0f, Color.White);
+                    }
                 }
 
                 // 2. Dessiner la mer (eau translucide)
@@ -308,7 +328,7 @@ namespace IslandWorldGenerator
             Raylib.UnloadFont(font);
             if (_hasModel)
             {
-                Raylib.UnloadModel(_terrainModel);
+                UnloadTerrainModels();
             }
             Raylib.CloseWindow();
         }
@@ -871,6 +891,51 @@ namespace IslandWorldGenerator
                     _persistence = Math.Min(0.80f, _persistence + 0.05f);
                     _needsRegen = true;
                 }
+                rowY += rowStep;
+
+                // Précision des contours de biomes
+                Raylib.DrawTextEx(font, "Précision contours", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
+                Raylib.DrawTextEx(font, $"x{_biomeEdgePrecision} (rendu biomes {_biomeEdgePrecision}x)", new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                bool clickPrecision1, clickPrecision2, clickPrecision4;
+                DrawButton("x1", new Rectangle(inputX, rowY + 31, 50, 30), _biomeEdgePrecision == 1 ? btnActive : btnNormal, btnHover, font, out clickPrecision1);
+                DrawButton("x2", new Rectangle(inputX + 58, rowY + 31, 50, 30), _biomeEdgePrecision == 2 ? btnActive : btnNormal, btnHover, font, out clickPrecision2);
+                DrawButton("x4", new Rectangle(inputX + 116, rowY + 31, 50, 30), _biomeEdgePrecision == 4 ? btnActive : btnNormal, btnHover, font, out clickPrecision4);
+                if (clickPrecision1 && _biomeEdgePrecision != 1)
+                {
+                    _biomeEdgePrecision = 1;
+                    _needsRegen = true;
+                }
+                if (clickPrecision2 && _biomeEdgePrecision != 2)
+                {
+                    _biomeEdgePrecision = 2;
+                    _needsRegen = true;
+                }
+                if (clickPrecision4 && _biomeEdgePrecision != 4 && _mapWidth <= 128)
+                {
+                    _biomeEdgePrecision = 4;
+                    _needsRegen = true;
+                }
+                rowY += rowStep;
+
+                // Méthode de rendu des frontières
+                string boundaryModeText = _biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares
+                    ? "Courbes (marching squares)"
+                    : "Tuiles nettes (quads)";
+                Raylib.DrawTextEx(font, "Mode contours", new Vector2(rowX, rowY), 13f, 1.0f, Color.LightGray);
+                Raylib.DrawTextEx(font, boundaryModeText, new Vector2(rowX, rowY + 16), 11f, 1.0f, new Color((byte)155, (byte)165, (byte)185, (byte)255));
+                bool clickSharpTiles, clickMarchingSquares;
+                DrawButton("Tuiles", new Rectangle(inputX, rowY + 31, 78, 30), _biomeBoundaryMode == BiomeBoundaryMode.SharpTiles ? btnActive : btnNormal, btnHover, font, out clickSharpTiles);
+                DrawButton("Courbes", new Rectangle(inputX + 86, rowY + 31, 92, 30), _biomeBoundaryMode == BiomeBoundaryMode.MarchingSquares ? btnActive : btnNormal, btnHover, font, out clickMarchingSquares);
+                if (clickSharpTiles && _biomeBoundaryMode != BiomeBoundaryMode.SharpTiles)
+                {
+                    _biomeBoundaryMode = BiomeBoundaryMode.SharpTiles;
+                    _needsRegen = true;
+                }
+                if (clickMarchingSquares && _biomeBoundaryMode != BiomeBoundaryMode.MarchingSquares)
+                {
+                    _biomeBoundaryMode = BiomeBoundaryMode.MarchingSquares;
+                    _needsRegen = true;
+                }
             }
             else if (_activeTab == 1)
             {
@@ -996,6 +1061,7 @@ namespace IslandWorldGenerator
                 if (click256 && _mapWidth != 256)
                 {
                     _mapWidth = 256; _mapLength = 256;
+                    _biomeEdgePrecision = Math.Min(_biomeEdgePrecision, 2);
                     ResetCamera();
                     _needsRegen = true;
                 }
@@ -1109,117 +1175,218 @@ namespace IslandWorldGenerator
             }
         }
 
-        // ---- METHODES DE GENERATION DU MAILLAGE LISSE 3D ----
+        // ---- METHODES DE GENERATION DU MAILLAGE 3D ----
 
-        private static unsafe Model GenerateSmoothTerrainMesh(WorldBlock[,] grid, int width, int length)
+        private static List<Model> GenerateSharpBiomeTerrainMeshes(WorldBlock[,] grid, int width, int length, float coordinateScale)
         {
+            const int maxChunkQuads = 120;
+            List<Model> models = new List<Model>();
+
+            for (int startX = 0; startX < width - 1; startX += maxChunkQuads)
+            {
+                for (int startZ = 0; startZ < length - 1; startZ += maxChunkQuads)
+                {
+                    int chunkWidth = Math.Min(maxChunkQuads, width - 1 - startX);
+                    int chunkLength = Math.Min(maxChunkQuads, length - 1 - startZ);
+                    models.Add(GenerateSharpBiomeTerrainChunk(grid, startX, startZ, chunkWidth, chunkLength, coordinateScale));
+                }
+            }
+
+            return models;
+        }
+
+        private static unsafe Model GenerateSharpBiomeTerrainChunk(WorldBlock[,] grid, int startX, int startZ, int chunkWidth, int chunkLength, float coordinateScale)
+        {
+            int quadCount = chunkWidth * chunkLength;
             Mesh mesh = new Mesh();
-            mesh.VertexCount = width * length;
-            mesh.TriangleCount = (width - 1) * (length - 1) * 2;
+            mesh.VertexCount = quadCount * 4;
+            mesh.TriangleCount = quadCount * 2;
 
-            // Allocation mémoire native
-            int verticesSize = mesh.VertexCount * 3 * sizeof(float);
-            mesh.Vertices = (float*)Marshal.AllocHGlobal(verticesSize);
+            mesh.Vertices = (float*)Marshal.AllocHGlobal(mesh.VertexCount * 3 * sizeof(float));
+            mesh.Colors = (byte*)Marshal.AllocHGlobal(mesh.VertexCount * 4 * sizeof(byte));
+            mesh.Normals = (float*)Marshal.AllocHGlobal(mesh.VertexCount * 3 * sizeof(float));
+            mesh.Indices = (ushort*)Marshal.AllocHGlobal(mesh.TriangleCount * 3 * sizeof(ushort));
 
-            int colorsSize = mesh.VertexCount * 4 * sizeof(byte);
-            mesh.Colors = (byte*)Marshal.AllocHGlobal(colorsSize);
+            int vertexIndex = 0;
+            int indexIndex = 0;
 
-            int normalsSize = mesh.VertexCount * 3 * sizeof(float);
-            mesh.Normals = (float*)Marshal.AllocHGlobal(normalsSize);
-
-            int indicesSize = mesh.TriangleCount * 3 * sizeof(ushort);
-            mesh.Indices = (ushort*)Marshal.AllocHGlobal(indicesSize);
-
-            // Remplissage des sommets (vertices) et des couleurs
-            for (int x = 0; x < width; x++)
+            for (int x = startX; x < startX + chunkWidth; x++)
             {
-                for (int z = 0; z < length; z++)
+                for (int z = startZ; z < startZ + chunkLength; z++)
                 {
-                    int index = x + z * width;
-                    var block = grid[x, z];
+                    Color color = grid[x, z].Color;
 
-                    // Position (X, Y=hauteur lissée, Z)
-                    mesh.Vertices[index * 3 + 0] = x;
-                    mesh.Vertices[index * 3 + 1] = block.Height;
-                    mesh.Vertices[index * 3 + 2] = z;
+                    Vector3 topLeft = new Vector3(x * coordinateScale, grid[x, z].Height, z * coordinateScale);
+                    Vector3 topRight = new Vector3((x + 1) * coordinateScale, grid[x + 1, z].Height, z * coordinateScale);
+                    Vector3 bottomLeft = new Vector3(x * coordinateScale, grid[x, z + 1].Height, (z + 1) * coordinateScale);
+                    Vector3 bottomRight = new Vector3((x + 1) * coordinateScale, grid[x + 1, z + 1].Height, (z + 1) * coordinateScale);
+                    Vector3 normal = CalculateQuadNormal(topLeft, bottomLeft, topRight);
 
-                    // Couleur du sommet (la couleur de son biome)
-                    mesh.Colors[index * 4 + 0] = block.Color.R;
-                    mesh.Colors[index * 4 + 1] = block.Color.G;
-                    mesh.Colors[index * 4 + 2] = block.Color.B;
-                    mesh.Colors[index * 4 + 3] = block.Color.A;
+                    ushort baseIndex = (ushort)vertexIndex;
+                    WriteTerrainVertex(mesh, vertexIndex++, topLeft, normal, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, bottomLeft, normal, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, topRight, normal, color);
+                    WriteTerrainVertex(mesh, vertexIndex++, bottomRight, normal, color);
 
-                    // Normales (par défaut, recalculées ensuite)
-                    mesh.Normals[index * 3 + 0] = 0f;
-                    mesh.Normals[index * 3 + 1] = 1f;
-                    mesh.Normals[index * 3 + 2] = 0f;
+                    mesh.Indices[indexIndex++] = baseIndex;
+                    mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
+                    mesh.Indices[indexIndex++] = (ushort)(baseIndex + 2);
+
+                    mesh.Indices[indexIndex++] = (ushort)(baseIndex + 2);
+                    mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
+                    mesh.Indices[indexIndex++] = (ushort)(baseIndex + 3);
                 }
             }
 
-            // Remplissage des indices pour former les triangles
-            int triIndex = 0;
-            for (int x = 0; x < width - 1; x++)
-            {
-                for (int z = 0; z < length - 1; z++)
-                {
-                    ushort topLeft = (ushort)(x + z * width);
-                    ushort topRight = (ushort)((x + 1) + z * width);
-                    ushort bottomLeft = (ushort)(x + (z + 1) * width);
-                    ushort bottomRight = (ushort)((x + 1) + (z + 1) * width);
-
-                    // Triangle 1
-                    mesh.Indices[triIndex++] = topLeft;
-                    mesh.Indices[triIndex++] = bottomLeft;
-                    mesh.Indices[triIndex++] = topRight;
-
-                    // Triangle 2
-                    mesh.Indices[triIndex++] = topRight;
-                    mesh.Indices[triIndex++] = bottomLeft;
-                    mesh.Indices[triIndex++] = bottomRight;
-                }
-            }
-
-            // Calcul des normales lissées pour l'éclairage de Raylib
-            ComputeMeshNormals(mesh, width, length);
-
-            // Charger le maillage en mémoire GPU
             Raylib.UploadMesh(ref mesh, false);
-
-            // Convertir le maillage en Modèle 3D utilisable par Raylib
             return Raylib.LoadModelFromMesh(mesh);
         }
 
-        private static unsafe void ComputeMeshNormals(Mesh mesh, int width, int length)
+        private static List<Model> GenerateMarchingSquaresBiomeTerrainMeshes(WorldBlock[,] grid, int width, int length, float coordinateScale)
         {
-            for (int x = 0; x < width; x++)
+            const int maxChunkCells = 40;
+            List<Model> models = new List<Model>();
+
+            for (int startX = 0; startX < width - 1; startX += maxChunkCells)
             {
-                for (int z = 0; z < length; z++)
+                for (int startZ = 0; startZ < length - 1; startZ += maxChunkCells)
                 {
-                    int index = x + z * width;
-
-                    // Calcul de la normale en fonction des voisins directs (hauteur)
-                    float hL = GetHeightAt(mesh, x - 1, z, width, length);
-                    float hR = GetHeightAt(mesh, x + 1, z, width, length);
-                    float hD = GetHeightAt(mesh, x, z - 1, width, length);
-                    float hU = GetHeightAt(mesh, x, z + 1, width, length);
-
-                    // Formule de normale lissée
-                    Vector3 normal = Vector3.Normalize(new Vector3(hL - hR, 2.0f, hD - hU));
-
-                    mesh.Normals[index * 3 + 0] = normal.X;
-                    mesh.Normals[index * 3 + 1] = normal.Y;
-                    mesh.Normals[index * 3 + 2] = normal.Z;
+                    int chunkWidth = Math.Min(maxChunkCells, width - 1 - startX);
+                    int chunkLength = Math.Min(maxChunkCells, length - 1 - startZ);
+                    models.Add(GenerateMarchingSquaresBiomeTerrainChunk(grid, startX, startZ, chunkWidth, chunkLength, coordinateScale));
                 }
             }
+
+            return models;
         }
 
-        private static unsafe float GetHeightAt(Mesh mesh, int x, int z, int width, int length)
+        private static unsafe Model GenerateMarchingSquaresBiomeTerrainChunk(WorldBlock[,] grid, int startX, int startZ, int chunkWidth, int chunkLength, float coordinateScale)
         {
-            if (x < 0) x = 0;
-            if (x >= width) x = width - 1;
-            if (z < 0) z = 0;
-            if (z >= length) z = length - 1;
-            return mesh.Vertices[(x + z * width) * 3 + 1];
+            List<TerrainTriangle> triangles = new List<TerrainTriangle>(chunkWidth * chunkLength * 8);
+
+            for (int x = startX; x < startX + chunkWidth; x++)
+            {
+                for (int z = startZ; z < startZ + chunkLength; z++)
+                {
+                    AddMarchingSquaresCellTriangles(grid, x, z, coordinateScale, triangles);
+                }
+            }
+
+            Mesh mesh = new Mesh();
+            mesh.VertexCount = triangles.Count * 3;
+            mesh.TriangleCount = triangles.Count;
+
+            mesh.Vertices = (float*)Marshal.AllocHGlobal(mesh.VertexCount * 3 * sizeof(float));
+            mesh.Colors = (byte*)Marshal.AllocHGlobal(mesh.VertexCount * 4 * sizeof(byte));
+            mesh.Normals = (float*)Marshal.AllocHGlobal(mesh.VertexCount * 3 * sizeof(float));
+            mesh.Indices = (ushort*)Marshal.AllocHGlobal(mesh.TriangleCount * 3 * sizeof(ushort));
+
+            int vertexIndex = 0;
+            int indexIndex = 0;
+            foreach (TerrainTriangle triangle in triangles)
+            {
+                Vector3 normal = CalculateQuadNormal(triangle.A, triangle.B, triangle.C);
+                ushort baseIndex = (ushort)vertexIndex;
+
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.A, normal, triangle.Color);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.B, normal, triangle.Color);
+                WriteTerrainVertex(mesh, vertexIndex++, triangle.C, normal, triangle.Color);
+
+                mesh.Indices[indexIndex++] = baseIndex;
+                mesh.Indices[indexIndex++] = (ushort)(baseIndex + 1);
+                mesh.Indices[indexIndex++] = (ushort)(baseIndex + 2);
+            }
+
+            Raylib.UploadMesh(ref mesh, false);
+            return Raylib.LoadModelFromMesh(mesh);
+        }
+
+        private static void AddMarchingSquaresCellTriangles(WorldBlock[,] grid, int x, int z, float coordinateScale, List<TerrainTriangle> triangles)
+        {
+            WorldBlock topLeftBlock = grid[x, z];
+            WorldBlock topRightBlock = grid[x + 1, z];
+            WorldBlock bottomLeftBlock = grid[x, z + 1];
+            WorldBlock bottomRightBlock = grid[x + 1, z + 1];
+
+            Vector3 topLeft = GetBlockPosition(topLeftBlock, coordinateScale);
+            Vector3 topRight = GetBlockPosition(topRightBlock, coordinateScale);
+            Vector3 bottomLeft = GetBlockPosition(bottomLeftBlock, coordinateScale);
+            Vector3 bottomRight = GetBlockPosition(bottomRightBlock, coordinateScale);
+            Vector3 center = (topLeft + topRight + bottomLeft + bottomRight) * 0.25f;
+
+            AddMarchingEdgeTriangle(topLeft, bottomLeft, center, topLeftBlock.Biome, bottomLeftBlock.Biome, topLeftBlock.Color, bottomLeftBlock.Color, triangles);
+            AddMarchingEdgeTriangle(bottomLeft, bottomRight, center, bottomLeftBlock.Biome, bottomRightBlock.Biome, bottomLeftBlock.Color, bottomRightBlock.Color, triangles);
+            AddMarchingEdgeTriangle(bottomRight, topRight, center, bottomRightBlock.Biome, topRightBlock.Biome, bottomRightBlock.Color, topRightBlock.Color, triangles);
+            AddMarchingEdgeTriangle(topRight, topLeft, center, topRightBlock.Biome, topLeftBlock.Biome, topRightBlock.Color, topLeftBlock.Color, triangles);
+        }
+
+        private static void AddMarchingEdgeTriangle(
+            Vector3 first,
+            Vector3 second,
+            Vector3 center,
+            BiomeType firstBiome,
+            BiomeType secondBiome,
+            Color firstColor,
+            Color secondColor,
+            List<TerrainTriangle> triangles)
+        {
+            if (firstBiome == secondBiome)
+            {
+                AddTerrainTriangle(first, second, center, firstColor, triangles);
+                return;
+            }
+
+            Vector3 cutPoint = Vector3.Lerp(first, second, 0.5f);
+            AddTerrainTriangle(first, cutPoint, center, firstColor, triangles);
+            AddTerrainTriangle(cutPoint, second, center, secondColor, triangles);
+        }
+
+        private static void AddTerrainTriangle(Vector3 a, Vector3 b, Vector3 c, Color color, List<TerrainTriangle> triangles)
+        {
+            Vector3 normal = Vector3.Cross(b - a, c - a);
+            if (normal.LengthSquared() < 0.000001f)
+            {
+                return;
+            }
+
+            triangles.Add(new TerrainTriangle(a, b, c, color));
+        }
+
+        private static Vector3 GetBlockPosition(WorldBlock block, float coordinateScale)
+        {
+            return new Vector3(block.Position.X * coordinateScale, block.Height, block.Position.Z * coordinateScale);
+        }
+
+        private static unsafe void WriteTerrainVertex(Mesh mesh, int index, Vector3 position, Vector3 normal, Color color)
+        {
+            mesh.Vertices[index * 3 + 0] = position.X;
+            mesh.Vertices[index * 3 + 1] = position.Y;
+            mesh.Vertices[index * 3 + 2] = position.Z;
+
+            mesh.Normals[index * 3 + 0] = normal.X;
+            mesh.Normals[index * 3 + 1] = normal.Y;
+            mesh.Normals[index * 3 + 2] = normal.Z;
+
+            mesh.Colors[index * 4 + 0] = color.R;
+            mesh.Colors[index * 4 + 1] = color.G;
+            mesh.Colors[index * 4 + 2] = color.B;
+            mesh.Colors[index * 4 + 3] = color.A;
+        }
+
+        private static Vector3 CalculateQuadNormal(Vector3 a, Vector3 b, Vector3 c)
+        {
+            Vector3 normal = Vector3.Cross(b - a, c - a);
+            return normal.LengthSquared() > 0.0001f ? Vector3.Normalize(normal) : Vector3.UnitY;
+        }
+
+        private static void UnloadTerrainModels()
+        {
+            foreach (Model terrainModel in _terrainModels)
+            {
+                Raylib.UnloadModel(terrainModel);
+            }
+
+            _terrainModels.Clear();
         }
     }
 }

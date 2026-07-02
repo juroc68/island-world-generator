@@ -11,6 +11,7 @@ Le projet permet d'explorer l'influence du relief, de l'eau, de l'humidité et d
 - Génération procédurale d'une île 3D.
 - Relief basé sur du bruit fractal.
 - Biomes calculés selon l'altitude, l'humidité et la température.
+- Contours de biomes configurables : tuiles nettes ou courbes par marching squares.
 - Végétation cohérente avec le climat.
 - Température extrême : à partir de 70°C, la végétation disparaît.
 - Habitants minimalistes placés sur l'île, avec prénoms français, déplacements et sauts aléatoires.
@@ -24,6 +25,8 @@ Le projet permet d'explorer l'influence du relief, de l'eau, de l'humidité et d
 - `Taille des reliefs` : contrôle la taille des grandes formes du terrain.
 - `Hauteur maximale` : amplifie la hauteur visible du relief.
 - `Rugosité` : ajoute ou réduit les détails secondaires du relief.
+- `Précision contours` : augmente la finesse visuelle des frontières de biomes sans changer la simulation.
+- `Mode contours` : choisit entre le rendu par quads nets et les frontières courbes triangulées.
 - `Niveau d'eau` : définit la proportion immergée.
 - `Humidité` : règle le climat global, avec équivalent en pourcentage.
 - `Température` : influence désert, taïga, neige et végétation.
